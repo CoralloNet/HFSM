@@ -46,7 +46,7 @@
 '		state @PhoneDestroyed
 '		#----------------------------------------
 
-Friend Class HFSM(Of TState, TEvent)
+Public Class HFSM(Of TState, TEvent)
 
 	Friend Delegate Function VerifyCallback(ByVal Parameters() As Object) As Boolean
 	Friend Delegate Sub EntryCallback(ByVal EntryState As TState)
@@ -125,7 +125,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 #Region " CONFIGURATION "
 
-	Friend Class StateConfiguration
+	Public Class StateConfiguration
 
 		Friend ConfigState As TState
 		Friend ParentFSM As HFSM(Of TState, TEvent)
@@ -179,7 +179,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 	End Class
 
-	Friend Function Configure(ByVal ConfigState As TState) As StateConfiguration
+	Public Function Configure(ByVal ConfigState As TState) As StateConfiguration
 		Dim NewStateConfiguration As StateConfiguration
 
 		NewStateConfiguration = New StateConfiguration() With {
@@ -254,7 +254,7 @@ Friend Class HFSM(Of TState, TEvent)
 		End If
 	End Sub
 
-	Friend Function Evolve() As TState
+	Public Function Evolve() As TState
 		Dim PrvState As ClsState
 		Dim PrvEvent As TEvent
 		Dim Parameters() As Object
@@ -293,7 +293,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 #Region " GRAPHVIZ CODE GENERATOR "
 
-	Friend Function ToGraphviz(ByVal NewLine As String) As String
+	Public Function ToGraphviz(ByVal NewLine As String) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim LineStyle As String
@@ -340,7 +340,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 #Region " C CODE GENERATOR "
 
-	Friend Function ToC_FSMHeader(ByVal NewLine As String) As String
+	Public Function ToC_FSMHeader(ByVal NewLine As String) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim ListEvent As System.Collections.Generic.List(Of TEvent)
@@ -382,7 +382,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 	End Function
 
-	Friend Function ToC_FSMSource(ByVal NewLine As String) As String
+	Public Function ToC_FSMSource(ByVal NewLine As String) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 
@@ -475,7 +475,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 #Region " GOJS CODE GENERATOR "
 
-	Friend Function ToGoJs(ByVal NewLine As String) As String
+	Public Function ToGoJs(ByVal NewLine As String) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim LineStyle As String
@@ -661,7 +661,7 @@ Friend Class HFSM(Of TState, TEvent)
 
 	End Function
 
-	Friend Function CheckCallback() As Boolean
+	Public Function CheckCallback() As Boolean
 		Dim RetVal As Boolean
 
 		RetVal = True

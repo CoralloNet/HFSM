@@ -1,0 +1,25 @@
+
+FSM: Process
+InitialState: PROCESS_INIT
+
+FsmHeader:
+FsmHeader: #include "myInclude.h"
+FsmHeader:
+
+State: PROCESS_INIT
+	OnExecute: ProcessInit
+	DefaultTransaction: PROCESS_READY
+
+State: PROCESS_READY
+	OnExecute: ProcessReady
+	Transaction On EVENT_DISPATCH: PROCESS_RUNNING
+
+State: PROCESS_RUNNING
+	OnExecute: ProcessRunning
+	Transaction On EVENT_INTERRUPT: PROCESS_READY
+	Transaction On EVENT_IO_WAIT: PROCESS_WAITING
+	Transaction On EVENT_EXIT: PROCESS_TERMINATED
+
+State: PROCESS_WAITING
+	OnExecute: ProcessWaiting
+	Transaction On EVENT_IO_READY: PROCESS_READY
