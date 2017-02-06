@@ -262,8 +262,24 @@ process.c
 
 ### 4.1 Documentation for Graphviz
 
+	With System.IO.File.CreateText("process.dot")
+		.Write(NewFsm.ToGraphviz(""))
+		.Close()
+	End With
+
+If you want you can convert the dot file in pdf directly from .NET:
+
+	System.Diagnostics.Process.Start("C:\Programs\graphviz\bin\dot.exe", "-Tpdf -o process.pdf process.dot")
+	System.Diagnostics.Process.Start("cmd.exe", "/c start process.pdf")
+
 ### 4.2 Documentation for GoJS
 
+	With System.IO.File.CreateText("process.js")
+		.Write(NewFsm.ToGoJs(""))
+		.Close()
+	End With
+
+## Thanks
 Thanks to 
 [simple state machine](http://simplestatemachine.codeplex.com/)
 [stateless](https://github.com/dotnet-state-machine/stateless)
