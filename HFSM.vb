@@ -2,7 +2,8 @@
 #Const GENERATE_EVENTS = 0
 
 'FSM Manager
-'	Put FSM into your project .NET, C and generate GraphViz documentation
+'	Put FSM into your .NET project
+'	Automatically generate C source and GraphViz / GoJS documentation
 '
 '	Original idea from
 '		http://simplestatemachine.codeplex.com/
@@ -275,7 +276,7 @@ Friend Class HFSM(Of TState, TEvent)
 				Fire(PrvEvent, Parameters)
 			ElseIf PrvState.OnExecuteString <> "" Then
 				Parameters = Nothing
-				PrvEvent = CType(PrvClassCallback.GetType.GetMethod(PrvState.OnExecuteString, CType(-1, System.Reflection.BindingFlags)).Invoke(Me, {CurrState}), TEvent)
+				PrvEvent = CType(PrvClassCallback.GetType.GetMethod(PrvState.OnExecuteString, CType(-1, System.Reflection.BindingFlags)).Invoke(PrvClassCallback, {CurrState, Nothing}), TEvent)
 				Fire(PrvEvent, Parameters)
 			Else
 				'Try to use default transaction
