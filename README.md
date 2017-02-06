@@ -74,6 +74,7 @@ And create your FSM:
 First of all, you must create a file like this:
 
 process.fsm
+
 	FSM: Process
 	InitialState: PROCESS_INIT
 
