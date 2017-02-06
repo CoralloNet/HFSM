@@ -662,8 +662,39 @@ Friend Class HFSM(Of TState, TEvent)
 	End Function
 
 	Friend Function CheckCallback() As Boolean
-		'ToDo: verificare l'associazione dinamica delle callback
-		Return False
+		Dim RetVal As Boolean
+
+		RetVal = True
+		For Each TmpStato In VtStati
+
+			'Generate a state description string like "a[label="state description"];"
+			If Not TmpStato.OnEntryString Is Nothing Then
+				If PrvClassCallback.GetType.GetMethod(TmpStato.OnEntryString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
+					System.Console.WriteLine("Unknown callback " & TmpStato.OnEntryString & "()")
+					RetVal = False
+				End If
+				'Must check function sign...
+			End If
+
+			If Not TmpStato.OnExecuteString Is Nothing Then
+				If PrvClassCallback.GetType.GetMethod(TmpStato.OnExecuteString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
+					System.Console.WriteLine("Unknown callback " & TmpStato.OnExecuteString & "()")
+					RetVal = False
+				End If
+				'Must check function sign...
+			End If
+
+			If Not TmpStato.OnExitString Is Nothing Then
+				If PrvClassCallback.GetType.GetMethod(TmpStato.OnExitString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
+					System.Console.WriteLine("Unknown callback " & TmpStato.OnExitString & "()")
+					RetVal = False
+				End If
+				'Must check function sign...
+			End If
+
+		Next
+
+		Return RetVal
 
 	End Function
 
