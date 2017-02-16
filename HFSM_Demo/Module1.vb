@@ -13,12 +13,6 @@ Module Module1
 			"process.fsm", New MyProcessCallback(), VtStates, VtEvents
 		)
 
-		'Optional: check if all function callback exists
-		If NewFsm.CheckCallback() = False Then
-			System.Console.WriteLine("Wrong callback linking")
-			PressKeyToExit()
-		End If
-
 		'Run FSM until end
 		Do Until NewFsm.Evolve() = "PROCESS_TERMINATED"
 		Loop
@@ -68,6 +62,16 @@ Module Module1
 		Friend Function ProcessWaiting(ByVal ExecuteState As String, ByRef Parameters() As Object) As String
 			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyWaiting")
 			Return "EVENT_IO_READY"
+		End Function
+
+		'SUBFSM: PROCESS_RUN_DETAIL
+		Friend Function ProcessDetailInit(ByVal ExecuteState As String, ByRef Parameters() As Object) As String
+			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyProcessDetailInit")
+			Return ""
+		End Function
+		Friend Function ProcessDetailReady(ByVal ExecuteState As String, ByRef Parameters() As Object) As String
+			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyProcessDetailReady")
+			Return "EVENT_EXIT"
 		End Function
 	End Class
 
