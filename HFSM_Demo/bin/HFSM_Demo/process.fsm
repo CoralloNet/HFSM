@@ -2,24 +2,44 @@
 FSM: Process
 InitialState: PROCESS_INIT
 
-FsmHeader:
-FsmHeader: #include "myInclude.h"
-FsmHeader:
+	FsmHeader:
+	FsmHeader: #include "myInclude.h"
+	FsmHeader:
 
-State: PROCESS_INIT
-	OnExecute: ProcessInit
-	DefaultTransaction: PROCESS_READY
+	State: PROCESS_INIT
+		OnExecute: ProcessInit
+		DefaultTransaction: PROCESS_READY
 
-State: PROCESS_READY
-	OnExecute: ProcessReady
-	Transaction On EVENT_DISPATCH: PROCESS_RUNNING
+	State: PROCESS_READY
+		OnExecute: ProcessReady
+		Transaction On EVENT_DISPATCH: PROCESS_RUNNING
 
-State: PROCESS_RUNNING
-	OnExecute: ProcessRunning
-	Transaction On EVENT_INTERRUPT: PROCESS_READY
-	Transaction On EVENT_IO_WAIT: PROCESS_WAITING
-	Transaction On EVENT_EXIT: PROCESS_TERMINATED
+	State: PROCESS_RUNNING
+		RunSubFsm: PROCESS_RUN_DETAIL
+		Transaction When DETAIL_INTERRUPT: PROCESS_READY
+		Transaction When DETAIL_WAITING: PROCESS_WAITING
+		Transaction When DETAIL_TERMINATED: PROCESS_TERMINATED
 
-State: PROCESS_WAITING
-	OnExecute: ProcessWaiting
-	Transaction On EVENT_IO_READY: PROCESS_READY
+	State: PROCESS_WAITING
+		OnExecute: ProcessWaiting
+		Transaction On EVENT_IO_READY: PROCESS_READY
+
+SUBFSM: PROCESS_RUN_DETAIL
+InitialState: DETAIL_INIT
+
+	State: DETAIL_INIT
+		OnExecute: ProcessDetailInit
+		DefaultTransaction: DETAIL_RUNNING
+
+	State: DETAIL_RUNNING
+		OnExecute: ProcessDetailReady
+		Transaction On EVENT_INTERRUPT: DETAIL_INTERRUPT
+		Transaction On EVENT_IO_WAIT: DETAIL_WAITING
+		Transaction On EVENT_EXIT: DETAIL_TERMINATED
+
+	State: DETAIL_INTERRUPT
+
+	State: DETAIL_WAITING
+
+	State: DETAIL_TERMINATED
+
