@@ -316,10 +316,75 @@ Public Class HFSM(Of TState, TEvent)
 
 #Region " GRAPHVIZ CODE GENERATOR "
 
-	Public Function ToGraphviz(ByVal NewLine As String) As String
+	Private Function PrvGraphvizFsm(ByVal CurrFsm As HFSM(Of TState, TEvent), ByVal NewLine As String, ByRef ClusterID As Integer) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
-		Dim LineStyle As String
+
+		StRes = ""
+
+		StRes &= NewLine
+		StRes &= NewLine
+		StRes &= NewTab & "subgraph cluster" & ClusterID & " {" & NewLine
+
+		For Each TmpStato In CurrFsm.VtStati
+
+			'Generate a state description string like "a[label="state description"];"
+			StRes &= NewTab & NewTab & TmpStato.CurrState.ToString() & "[label="""
+			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
+			StRes &= TmpStato.CurrState.ToString() & "\n"
+			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
+			If Not TmpStato.OnSubFsm Is Nothing Then StRes &= "<" & TmpStato.OnSubFsm.PrvFsmName & ">\n"
+			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
+			StRes &= """"
+			If Not TmpStato.OnSubFsm Is Nothing Then StRes &= ",style=bold"
+			StRes &= "];" & NewLine
+
+			For Each TmpTransaction In TmpStato.TransactionList
+				Dim StLineFrom As String
+				Dim StLineTo As String
+				Dim StLineAction As String
+				Dim StLineStyle As String
+
+				'Generate a transaction description string like "a -> b[label="transaction condition"];"
+				StLineFrom = TmpStato.CurrState.ToString()
+				StLineTo = TmpTransaction.TrDestState.ToString()
+				StLineAction = ""
+				StLineStyle = ""
+				If Not TmpTransaction.TrEvent Is Nothing Then
+					StLineAction = TmpTransaction.TrEvent.ToString()
+				ElseIf Not TmpTransaction.TrStateEvent Is Nothing Then
+					StLineAction = TmpTransaction.TrStateEvent.ToString()
+					StLineStyle = ",style=bold"
+				End If
+				StRes &= NewTab & NewTab & StLineFrom & " -> " & StLineTo & "[label=""" & StLineAction & """" & StLineStyle & "];" & NewLine
+			Next
+
+			'Generate default transaction description string like "a -> b[label="*"];"
+			If Not TmpStato.DefaultTransaction Is Nothing Then
+				Dim StLineStyle As String
+
+				StLineStyle = ""
+				If TmpStato.TransactionList.Count > 0 Then StLineStyle = ",style=dotted"
+				StRes &= NewTab & NewTab & TmpStato.CurrState.ToString() & " -> " & TmpStato.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & StLineStyle & "];" & NewLine
+			End If
+		Next
+
+		'Close subgraph
+		StRes &= NewTab & NewTab & "label = """ & CurrFsm.PrvFsmName & """;" & NewLine
+		StRes &= NewTab & "}" & NewLine
+
+		'Call for every SubFSM
+		For Each TmpSubFsm In CurrFsm.VtSubFSM
+			ClusterID += 1
+			StRes &= PrvGraphvizFsm(TmpSubFsm, NewLine, ClusterID)
+		Next
+
+		Return StRes
+
+	End Function
+
+	Public Function ToGraphviz(ByVal NewLine As String) As String
+		Dim StRes As String
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
 		StRes = ""
@@ -327,29 +392,9 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= NewLine
 		StRes &= "digraph {" & NewLine
 
-		For Each TmpStato In VtStati
+		StRes &= PrvGraphvizFsm(Me, NewLine, 0)
 
-			'Generate a state description string like "a[label="state description"];"
-			StRes &= NewTab & TmpStato.CurrState.ToString() & "[label="""
-			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
-			StRes &= TmpStato.CurrState.ToString() & "\n"
-			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
-			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
-			StRes &= """];" & NewLine
-
-			For Each TmpTransaction In TmpStato.TransactionList
-				'Generate a transaction description string like "a -> b[label="transaction condition"];"
-				StRes &= NewTab & TmpStato.CurrState.ToString() & " -> " & TmpTransaction.TrDestState.ToString() & "[label=""" & TmpTransaction.TrEvent.ToString() & """];" & NewLine
-			Next
-
-			'Generate default transaction description string like "a -> b[label="*"];"
-			If Not TmpStato.DefaultTransaction Is Nothing Then
-				LineStyle = ""
-				If TmpStato.TransactionList.Count > 0 Then LineStyle = ",style=""dotted"""
-				StRes &= NewTab & TmpStato.CurrState.ToString() & " -> " & TmpStato.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & LineStyle & "];" & NewLine
-			End If
-		Next
-
+		StRes &= NewLine
 		StRes &= "}"
 
 		Return StRes
