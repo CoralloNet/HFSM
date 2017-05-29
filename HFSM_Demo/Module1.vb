@@ -2,45 +2,54 @@
 Module Module1
 
 	Sub Main()
+		Dim FsmName As String = "process"
 
 		'Debug string to console
-		System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Start")
+		System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Load from file")
 
 		'Create FSM from file definition
 		Dim VtStates() As String = {}
 		Dim VtEvents() As String = {}
 		Dim NewFsm As HFSM_lib.HFSM(Of String, String) = HFSM_lib.HFSM(Of String, String).LoadFromFile(
-			"process.fsm", New MyProcessCallback(), VtStates, VtEvents
+			FsmName & ".fsm", New MyProcessCallback(), VtStates, VtEvents
 		)
+
+		If NewFsm Is Nothing Then
+			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Error loading FSM")
+			PressKeyToExit()
+		End If
+
+		'Debug string to console
+		System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Start")
 
 		'Run FSM until end
 		Do Until NewFsm.Evolve() = "PROCESS_TERMINATED"
 		Loop
 
 		'Export FSM in other languages
-		With System.IO.File.CreateText("process.dot")
+		With System.IO.File.CreateText(FsmName & ".dot")
 			.Write(NewFsm.ToGraphviz(""))
 			.Close()
 		End With
-		With System.IO.File.CreateText("process.h")
+		With System.IO.File.CreateText(FsmName & ".h")
 			.Write(NewFsm.ToC_FSMHeader(""))
 			.Close()
 		End With
-		With System.IO.File.CreateText("process.c")
+		With System.IO.File.CreateText(FsmName & ".c")
 			.Write(NewFsm.ToC_FSMSource(""))
 			.Close()
 		End With
 
 		'Convert graphviz drwaing in pdf and open it
-		System.Diagnostics.Process.Start("C:\Organize\Utility\graphviz\bin\dot.exe", "-Tpdf -o process.pdf process.dot").WaitForExit()
-		System.Diagnostics.Process.Start("cmd.exe", "/c start process.pdf")
+		System.Diagnostics.Process.Start("C:\Organize\Utility\graphviz\bin\dot.exe", "-Tpdf -o " & FsmName & ".pdf " & FsmName & ".dot").WaitForExit()
+		System.Diagnostics.Process.Start("cmd.exe", "/c start " & FsmName & ".pdf")
 
 		PressKeyToExit()
 
 	End Sub
 
 	Private Sub PressKeyToExit()
-		System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Premi un tasto per uscire")
+		System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " Press any key to exit")
 		System.Console.ReadKey()
 		End
 
@@ -69,10 +78,11 @@ Module Module1
 			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyProcessDetailInit")
 			Return ""
 		End Function
-		Friend Function ProcessDetailReady(ByVal ExecuteState As String, ByRef Parameters() As Object) As String
-			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyProcessDetailReady")
+		Friend Function ProcessDetailRunning(ByVal ExecuteState As String, ByRef Parameters() As Object) As String
+			System.Console.WriteLine(Date.Now.ToString("yyyyMMdd-HHmmss.fff") & " [" & ExecuteState.ToString() & "] MyProcessDetailRunning")
 			Return "EVENT_EXIT"
 		End Function
+
 	End Class
 
 End Module

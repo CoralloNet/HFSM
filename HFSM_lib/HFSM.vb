@@ -134,7 +134,12 @@ Public Class HFSM(Of TState, TEvent)
 			Return Me
 		End Function
 		Friend Function OnEntry(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
-			ParentFSM.GetState(ConfigState).OnEntry = TryCast(System.Delegate.CreateDelegate(GetType(EntryCallback), ClassCallback, FunctionCallback), EntryCallback)
+			Try
+				ParentFSM.GetState(ConfigState).OnEntry = TryCast(System.Delegate.CreateDelegate(GetType(EntryCallback), ClassCallback, FunctionCallback), EntryCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnEntry function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
 			Return Me
 		End Function
 
@@ -143,7 +148,12 @@ Public Class HFSM(Of TState, TEvent)
 			Return Me
 		End Function
 		Friend Function OnExit(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
-			ParentFSM.GetState(ConfigState).OnExit = TryCast(System.Delegate.CreateDelegate(GetType(ExitCallback), ClassCallback, FunctionCallback), ExitCallback)
+			Try
+				ParentFSM.GetState(ConfigState).OnExit = TryCast(System.Delegate.CreateDelegate(GetType(ExitCallback), ClassCallback, FunctionCallback), ExitCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnExit function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
 			Return Me
 		End Function
 
@@ -152,7 +162,12 @@ Public Class HFSM(Of TState, TEvent)
 			Return Me
 		End Function
 		Friend Function OnExecute(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
-			ParentFSM.GetState(ConfigState).OnExecute = TryCast(System.Delegate.CreateDelegate(GetType(ExecuteCallback), ClassCallback, FunctionCallback), ExecuteCallback)
+			Try
+				ParentFSM.GetState(ConfigState).OnExecute = TryCast(System.Delegate.CreateDelegate(GetType(ExecuteCallback), ClassCallback, FunctionCallback), ExecuteCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnExecute function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
 			Return Me
 		End Function
 
@@ -426,7 +441,7 @@ Public Class HFSM(Of TState, TEvent)
 		ListEvent = New System.Collections.Generic.List(Of TEvent)
 		For Each TmpState In VtStati
 			For Each TmpTransaction In TmpState.TransactionList
-				If ListEvent.Contains(TmpTransaction.TrEvent) = False Then
+				If Not TmpTransaction.TrEvent Is Nothing AndAlso ListEvent.Contains(TmpTransaction.TrEvent) = False Then
 					ListEvent.Add(TmpTransaction.TrEvent)
 				End If
 			Next
@@ -491,16 +506,26 @@ Public Class HFSM(Of TState, TEvent)
 				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnExecute.Method.Name() & "(Parameters);" & NewLine
 			End If
 
-			'Evaluate transaction
-			StRes &= NewTab & NewTab & NewTab & "switch (TmpEvent){" & NewLine
-			For Each TmpTransaction In TmpStato.TransactionList
-				StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
-			Next
-			If Not TmpStato.DefaultTransaction Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ CurrState = " & TmpStato.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
+			'SubFSM
+			If Not TmpStato.OnSubFsm Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
+
+				For Each TmpTransaction In TmpStato.TransactionList
+					StRes &= NewTab & NewTab & NewTab & NewTab & "if (...) " & TmpTransaction.TrStateEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				Next
+
+			Else
+				'Evaluate transaction
+				StRes &= NewTab & NewTab & NewTab & "switch (TmpEvent){" & NewLine
+				For Each TmpTransaction In TmpStato.TransactionList
+					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				Next
+				If Not TmpStato.DefaultTransaction Is Nothing Then
+					StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ CurrState = " & TmpStato.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				End If
+				StRes &= NewTab & NewTab & NewTab & "}" & NewLine
+				StRes &= NewLine
 			End If
-			StRes &= NewTab & NewTab & NewTab & "}" & NewLine
-			StRes &= NewLine
 
 			'OnExit
 			StRes &= NewTab & NewTab & NewTab & "if (CurrState != " & TmpStato.CurrState.ToString() & "){" & NewLine
@@ -648,32 +673,28 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "onentry:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				MyStateConfiguration.OnEntry(StParameter, ClassCallback)
+				If MyStateConfiguration.OnEntry(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
 			ElseIf StCommand Like "onexit:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				MyStateConfiguration.OnExit(StParameter, ClassCallback)
+				If MyStateConfiguration.OnExit(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
 			ElseIf StCommand Like "onexecute:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				MyStateConfiguration.OnExecute(StParameter, ClassCallback)
+				If MyStateConfiguration.OnExecute(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
 			ElseIf StCommand Like "runsubfsm:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
 				If Not NewClsFsm.VtSubFSM.Exists(Function(T) T.PrvFsmName = StParameter) Then
 					MyFsmConfiguration = New HFSM(Of String, String)(StParameter, Nothing)
@@ -684,13 +705,11 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "transaction on *" Or StCommand Like "transaction when *" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
 				If Not StCommand Like "* on *:*" And Not StCommand Like "* when *:*" Then
 					System.Diagnostics.Debug.WriteLine("Error splitting '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
 
 				If StCommand Like "* on *:*" Then
@@ -706,15 +725,13 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "defaulttransaction:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
 				MyStateConfiguration.DefaultTransaction(StParameter)
 
 			Else
 				System.Diagnostics.Debug.WriteLine("Unknown command '" & StLine & "'")
-				Stop
-				Return Nothing
+				Return LoadFileError(FInput)
 
 			End If
 		Loop
@@ -723,6 +740,11 @@ Public Class HFSM(Of TState, TEvent)
 
 		Return NewClsFsm
 
+	End Function
+
+	Private Shared Function LoadFileError(ByVal FInput As System.IO.StreamReader) As HFSM(Of String, String)
+		FInput.Close()
+		Return Nothing
 	End Function
 
 #End Region

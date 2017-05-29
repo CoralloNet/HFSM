@@ -32,7 +32,7 @@ InitialState: DETAIL_INIT
 		DefaultTransaction: DETAIL_RUNNING
 
 	State: DETAIL_RUNNING
-		OnExecute: ProcessDetailReady
+		OnExecute: ProcessDetailRunning
 		Transaction On EVENT_INTERRUPT: DETAIL_INTERRUPT
 		Transaction On EVENT_IO_WAIT: DETAIL_WAITING
 		Transaction On EVENT_EXIT: DETAIL_TERMINATED
