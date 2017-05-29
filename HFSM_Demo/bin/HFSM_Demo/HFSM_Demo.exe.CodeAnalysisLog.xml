@@ -25,4 +25,10 @@
   <String Key="Warnings">avvisi</String>
   <String Key="ReportTitle">Report di analisi codice</String>
  </Localized>
+ <Exceptions>
+  <Exception Keyword="CA0068" Kind="Engine" TreatAsWarning="True">
+   <Type>Microsoft.FxCop.Sdk.FxCopException</Type>
+   <ExceptionMessage>Impossibile trovare le informazioni di debug per l'assembly di destinazione 'HFSM_Demo.exe'. Per risultati di analisi ottimali, includere il file pdb con le informazioni di debug per 'HFSM_Demo.exe' nella stessa directory dell'assembly di destinazione.</ExceptionMessage>
+  </Exception>
+ </Exceptions>
 </FxCopReport>

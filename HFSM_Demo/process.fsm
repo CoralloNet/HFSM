@@ -3,7 +3,7 @@ FSM: Process
 InitialState: PROCESS_INIT
 
 	FsmHeader:
-	FsmHeader: #include "myInclude.h"
+	FsmHeader: #include "process.h"
 	FsmHeader:
 
 	State: PROCESS_INIT
