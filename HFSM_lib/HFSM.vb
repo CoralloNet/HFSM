@@ -518,11 +518,13 @@ Public Class HFSM(Of TState, TEvent)
 
 			StRes &= NewTab & NewTab & "case " & TmpState.CurrState.ToString() & ":{" & NewLine
 			StRes &= NewTab & NewTab & NewTab & VarEnEventsName & " TmpEvent;" & NewLine
+			StRes &= NewLine
 
 			'OnEntry
-			If Not TmpState.OnEntry Is Nothing Then
+			If Not TmpState.OnEntry Is Nothing Or Not TmpState.OnSubFsm Is Nothing Then
 				StRes &= NewTab & NewTab & NewTab & "if (" & VarStateEntryName & " == 1){" & NewLine
 				If Not TmpState.OnEntry Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnEntry.Method.Name() & "(Parameters);" & NewLine
+				If Not TmpState.OnSubFsm Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & TmpState.OnSubFsm.PrvFsmName & "_Restart();" & NewLine
 				StRes &= NewTab & NewTab & NewTab & NewTab & VarStateEntryName & " = 0;" & NewLine
 				StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 				StRes &= NewLine
