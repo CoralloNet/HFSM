@@ -59,7 +59,7 @@ Public Class HFSM(Of TState, TEvent)
 	Friend Event OnExecute(ByVal ExecuteState As TState)
 #End If
 
-	Private VtStati As System.Collections.Generic.List(Of ClsState)
+	Private VtStates As System.Collections.Generic.List(Of ClsState)
 	Private CurrState As TState
 	Private PrvInitialState As TState
 	Private PrvFsmName As String
@@ -69,7 +69,7 @@ Public Class HFSM(Of TState, TEvent)
 
 	Friend Sub New(ByVal FsmName As String, ByVal InitialState As TState)
 		PrvFsmName = FsmName
-		VtStati = New System.Collections.Generic.List(Of ClsState)
+		VtStates = New System.Collections.Generic.List(Of ClsState)
 		VtSubFSM = New System.Collections.Generic.List(Of HFSM(Of TState, TEvent))
 		CurrState = InitialState
 		PrvInitialState = InitialState
@@ -105,7 +105,7 @@ Public Class HFSM(Of TState, TEvent)
 	Private Function GetState(ByVal SearchState As TState) As ClsState
 		Dim NewState As ClsState
 
-		For Each NewState In VtStati
+		For Each NewState In VtStates
 			If NewState.CurrState.Equals(SearchState) Then
 				Return NewState
 			End If
@@ -114,7 +114,7 @@ Public Class HFSM(Of TState, TEvent)
 		NewState = New ClsState() With {
 			.CurrState = SearchState
 		}
-		VtStati.Add(NewState)
+		VtStates.Add(NewState)
 
 		Return NewState
 
@@ -234,7 +234,7 @@ Public Class HFSM(Of TState, TEvent)
 		Dim PrvState As ClsState
 		Dim PrvTransaction As ClsTransaction
 
-		PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+		PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 		If Not PrvState Is Nothing Then
 
 			'Search a transaction
@@ -277,7 +277,7 @@ Public Class HFSM(Of TState, TEvent)
 #If GENERATE_EVENTS Then
 					RaiseEvent OnEntry(CurrState)
 #End If
-					PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+					PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 					If Not PrvState Is Nothing Then
 						If Not PrvState.OnEntry Is Nothing Then
 							PrvState.OnEntry(CurrState)
@@ -303,7 +303,7 @@ Public Class HFSM(Of TState, TEvent)
 		'
 		'If state callback is nothing, try to use default transaction
 
-		PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+		PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 		If Not PrvState Is Nothing Then
 
 #If GENERATE_EVENTS Then
@@ -341,7 +341,7 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= NewLine
 		StRes &= NewTab & "subgraph cluster" & ClusterID & " {" & NewLine
 
-		For Each TmpState In CurrFsm.VtStati
+		For Each TmpState In CurrFsm.VtStates
 
 			'Generate a state description string like "a[label="state description"];"
 			StRes &= NewTab & NewTab & TmpState.CurrState.ToString() & "[label="""
@@ -430,6 +430,7 @@ Public Class HFSM(Of TState, TEvent)
 		Dim VarEnEventsName As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim ListEvent As System.Collections.Generic.List(Of TEvent)
+		Dim ListStates As System.Collections.Generic.List(Of TState)
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
 		StRes = ""
@@ -438,22 +439,41 @@ Public Class HFSM(Of TState, TEvent)
 
 		VarEnStatesName = CurrFSM.PrvFsmName & "_EnStates"
 		VarEnEventsName = CurrFSM.PrvFsmName & "_EnEvents"
+
+		'Add states to temporary list
+		ListStates = New System.Collections.Generic.List(Of TState)
+		For Each TmpState In CurrFSM.VtStates
+			If ListStates.Contains(TmpState.CurrState) = False Then ListStates.Add(TmpState.CurrState)
+			If Not TmpState.DefaultTransaction Is Nothing AndAlso ListStates.Contains(TmpState.DefaultTransaction.TrDestState) = False Then
+				ListStates.Add(TmpState.DefaultTransaction.TrDestState)
+			End If
+			For Each TmpTransaction In TmpState.TransactionList
+				If Not TmpTransaction.TrDestState Is Nothing AndAlso ListStates.Contains(TmpTransaction.TrDestState) = False Then
+					ListStates.Add(TmpTransaction.TrDestState)
+				End If
+			Next
+		Next
+
+		'Put states to file
 		StRes &= "typedef enum {" & NewLine
-		For Each TmpState In CurrFSM.VtStati
-			StRes &= NewTab & TmpState.CurrState.ToString() & "," & NewLine
+		For Each TmpState In ListStates
+			StRes &= NewTab & TmpState.ToString() & "," & NewLine
 		Next
 		StRes &= "} " & VarEnStatesName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "typedef enum {" & NewLine
+		'Add events to temporary list
 		ListEvent = New System.Collections.Generic.List(Of TEvent)
-		For Each TmpState In CurrFSM.VtStati
+		For Each TmpState In CurrFSM.VtStates
 			For Each TmpTransaction In TmpState.TransactionList
 				If Not TmpTransaction.TrEvent Is Nothing AndAlso ListEvent.Contains(TmpTransaction.TrEvent) = False Then
 					ListEvent.Add(TmpTransaction.TrEvent)
 				End If
 			Next
 		Next
+
+		'Put events to file
+		StRes &= "typedef enum {" & NewLine
 		For Each TmpEvent In ListEvent
 			StRes &= NewTab & TmpEvent.ToString() & "," & NewLine
 		Next
@@ -467,7 +487,7 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= NewLine
 
 		'Jump to sub FSM
-		For Each TmpState In CurrFSM.VtStati
+		For Each TmpState In CurrFSM.VtStates
 			If Not TmpState.OnSubFsm Is Nothing Then
 				StRes &= ToC_FSMHeader(NewLine, TmpState.OnSubFsm)
 			End If
@@ -514,7 +534,7 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewTab & "switch (" & VarCurrStateName & "){" & NewLine
 		StRes &= NewLine
-		For Each TmpState In CurrFSM.VtStati
+		For Each TmpState In CurrFSM.VtStates
 
 			StRes &= NewTab & NewTab & "case " & TmpState.CurrState.ToString() & ":{" & NewLine
 			StRes &= NewTab & NewTab & NewTab & VarEnEventsName & " TmpEvent;" & NewLine
@@ -537,7 +557,7 @@ Public Class HFSM(Of TState, TEvent)
 
 			'SubFSM
 			If Not TmpState.OnSubFsm Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & TmpState.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
 			End If
 
 			'Evaluate transaction
@@ -579,11 +599,70 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= "}" & NewLine
 
 		'Jump to sub FSM
-		For Each TmpState In CurrFSM.VtStati
+		For Each TmpState In CurrFSM.VtStates
 			If Not TmpState.OnSubFsm Is Nothing Then
 				StRes &= ToC_FSMSource(NewLine, TmpState.OnSubFsm)
 			End If
 		Next
+
+		Return StRes
+
+	End Function
+
+	Public Function ToC_FSMMain(ByVal NewLine As String) As String
+		Return ToC_FSMMain(NewLine, Me)
+	End Function
+
+	Private Function ToC_FSMMain(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
+		Dim StRes As String
+		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
+		Dim FunctionPrefix As String
+		Dim ListFunctions As System.Collections.Generic.List(Of String)
+
+		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
+		StRes = ""
+
+		If CurrFSM.PrvFsmHeader <> "" Then
+			StRes &= NewLine
+			StRes &= CurrFSM.PrvFsmHeader & NewLine
+			StRes &= NewLine
+			StRes &= "int main(){" & NewLine
+			StRes &= "}" & NewLine
+			StRes &= NewLine
+		End If
+
+		'Add states to temporary list
+		ListFunctions = New System.Collections.Generic.List(Of String)
+		FunctionPrefix = "FSM_" & CurrFSM.PrvFsmName & "_"
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnEntry Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnEntry.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnEntry.Method.Name)
+			End If
+			If Not TmpState.OnExecute Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnExecute.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnExecute.Method.Name)
+			End If
+			If Not TmpState.OnExit Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnExit.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnExit.Method.Name)
+			End If
+		Next
+
+		'Add empty functions
+		For Each TmpFunction In ListFunctions
+			StRes &= CurrFSM.PrvFsmName & "_EnStates " & TmpFunction.ToString() & "(void * Parameters){" & NewLine
+			StRes &= NewTab & "return 0x00;" & NewLine
+			StRes &= "}" & NewLine
+			StRes &= NewLine
+		Next
+		StRes &= NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMMain(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
+
+		StRes &= NewLine
 
 		Return StRes
 
@@ -606,7 +685,7 @@ Public Class HFSM(Of TState, TEvent)
 
 		'State list
 		StRes &= "[" & NewLine
-		For Each TmpState In VtStati
+		For Each TmpState In VtStates
 
 			'Generate a state description string like "{ key: "state name", text: "state description" },"
 			StRes &= NewTab & "{ "
@@ -623,7 +702,7 @@ Public Class HFSM(Of TState, TEvent)
 
 		'Transaction list
 		StRes &= ", [" & NewLine
-		For Each TmpState In VtStati
+		For Each TmpState In VtStates
 
 			For Each TmpTransaction In TmpState.TransactionList
 				'Generate a transaction description string like "{ from: "state key", to: "state key",  text: "transaction condition" },"
@@ -735,8 +814,9 @@ Public Class HFSM(Of TState, TEvent)
 					Return LoadFileError(FInput)
 				End If
 				If Not NewClsFsm.VtSubFSM.Exists(Function(T) T.PrvFsmName = StParameter) Then
-					MyFsmConfiguration = New HFSM(Of String, String)(StParameter, Nothing)
-					NewClsFsm.VtSubFSM.Add(MyFsmConfiguration)
+					Dim PrvNewFsmConfiguration As HFSM(Of String, String)
+					PrvNewFsmConfiguration = New HFSM(Of String, String)(StParameter, Nothing)
+					NewClsFsm.VtSubFSM.Add(PrvNewFsmConfiguration)
 				End If
 				MyStateConfiguration.OnSubFSM(NewClsFsm.VtSubFSM.Find(Function(T) T.PrvFsmName = StParameter))
 

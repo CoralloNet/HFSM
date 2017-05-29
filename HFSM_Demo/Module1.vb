@@ -39,6 +39,10 @@ Module Module1
 			.Write(NewFsm.ToC_FSMSource(""))
 			.Close()
 		End With
+		With System.IO.File.CreateText("main.c")
+			.Write(NewFsm.ToC_FSMMain(""))
+			.Close()
+		End With
 
 		'Convert graphviz drwaing in pdf and open it
 		System.Diagnostics.Process.Start("C:\Organize\Utility\graphviz\bin\dot.exe", "-Tpdf -o " & FsmName & ".pdf " & FsmName & ".dot").WaitForExit()
