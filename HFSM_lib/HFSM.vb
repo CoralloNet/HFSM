@@ -149,7 +149,7 @@ Public Class HFSM(Of TState, TEvent)
 		End Function
 		Friend Function OnExit(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
 			Try
-				ParentFSM.GetState(ConfigState).OnExit = TryCast(System.Delegate.CreateDelegate(GetType(ExitCallback), ClassCallback, FunctionCallback), ExitCallback)
+				ParentFSM.GetState(ConfigState).OnExit = TryCast(System.Delegate.CreateDelegate(GetType(ExitCallback), Nothing, FunctionCallback), ExitCallback)
 			Catch
 				System.Diagnostics.Debug.WriteLine("Cannot find OnExit function '" & FunctionCallback & "'")
 				Return Nothing
@@ -162,12 +162,22 @@ Public Class HFSM(Of TState, TEvent)
 			Return Me
 		End Function
 		Friend Function OnExecute(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
-			Try
-				ParentFSM.GetState(ConfigState).OnExecute = TryCast(System.Delegate.CreateDelegate(GetType(ExecuteCallback), ClassCallback, FunctionCallback), ExecuteCallback)
-			Catch
-				System.Diagnostics.Debug.WriteLine("Cannot find OnExecute function '" & FunctionCallback & "'")
-				Return Nothing
-			End Try
+			If ClassCallback Is Nothing Then
+				'Create a dummy callback, only to mantain function name for C source code generation
+				Dim DummyCallback As New System.Reflection.Emit.DynamicMethod(FunctionCallback, GetType(TEvent), {GetType(TState), GetType(Object()).MakeByRefType()})
+				With DummyCallback.GetILGenerator
+					.Emit(System.Reflection.Emit.OpCodes.Ret)
+				End With
+				ParentFSM.GetState(ConfigState).OnExecute = TryCast(DummyCallback.CreateDelegate(GetType(ExecuteCallback)), ExecuteCallback)
+
+			Else
+				Try
+					ParentFSM.GetState(ConfigState).OnExecute = TryCast(System.Delegate.CreateDelegate(GetType(ExecuteCallback), ClassCallback, FunctionCallback), ExecuteCallback)
+				Catch
+					System.Diagnostics.Debug.WriteLine("Cannot find OnExecute function '" & FunctionCallback & "'")
+					Return Nothing
+				End Try
+			End If
 			Return Me
 		End Function
 
@@ -724,13 +734,22 @@ Public Class HFSM(Of TState, TEvent)
 
 #End Region
 
-#Region " READ FROM FILE "
+#Region " READ FROM STREAM "
 
 	Public Shared Function LoadFromFile(ByVal FilePath As String, ByVal ClassCallback As Object, ByRef MyStates As String(), ByRef MyEvents As String()) As HFSM(Of String, String)
+		Return LoadFromStream(New System.IO.StreamReader(FilePath), ClassCallback, MyStates, MyEvents)
+	End Function
+
+	Public Shared Function LoadFromString(ByVal StFSM As String, ByVal ClassCallback As Object, ByRef MyStates As String(), ByRef MyEvents As String()) As HFSM(Of String, String)
+		Return LoadFromStream(New System.IO.StringReader(StFSM), ClassCallback, MyStates, MyEvents)
+	End Function
+
+	Public Shared Function LoadFromStream(ByVal InputStream As System.IO.TextReader, ByVal ClassCallback As Object, ByRef MyStates As String(), ByRef MyEvents As String()) As HFSM(Of String, String)
 		Dim NewClsFsm As HFSM(Of String, String)
-		Dim FInput As System.IO.StreamReader
 		Dim MyFsmConfiguration As HFSM(Of String, String)
 		Dim MyStateConfiguration As HFSM(Of String, String).StateConfiguration
+
+		If InputStream Is Nothing Then Return Nothing
 
 		MyStates = New String() {}
 		MyEvents = New String() {}
@@ -740,15 +759,14 @@ Public Class HFSM(Of TState, TEvent)
 		MyFsmConfiguration = NewClsFsm
 		MyStateConfiguration = Nothing
 
-		FInput = New System.IO.StreamReader(FilePath)
-		If FInput Is Nothing Then Return Nothing
-
-		Do Until FInput.EndOfStream
+		Do
 			Dim StLine As String
 			Dim StCommand As String
 			Dim StParameter As String
 
-			StLine = FInput.ReadLine().Trim
+			StLine = InputStream.ReadLine()
+			If StLine Is Nothing Then Exit Do
+			StLine = StLine.Trim
 			StCommand = StLine.ToLower
 
 			If StLine.StartsWith("#") Or StLine.Length = 0 Then Continue Do
@@ -790,28 +808,28 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "onentry:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
-				If MyStateConfiguration.OnEntry(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
+				If MyStateConfiguration.OnEntry(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(InputStream)
 
 			ElseIf StCommand Like "onexit:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
-				If MyStateConfiguration.OnExit(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
+				If MyStateConfiguration.OnExit(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(InputStream)
 
 			ElseIf StCommand Like "onexecute:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
-				If MyStateConfiguration.OnExecute(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
+				If MyStateConfiguration.OnExecute(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(InputStream)
 
 			ElseIf StCommand Like "runsubfsm:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
 				If Not NewClsFsm.VtSubFSM.Exists(Function(T) T.PrvFsmName = StParameter) Then
 					Dim PrvNewFsmConfiguration As HFSM(Of String, String)
@@ -823,11 +841,11 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "transaction on *" Or StCommand Like "transaction when *" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
 				If Not StCommand Like "* on *:*" And Not StCommand Like "* when *:*" Then
 					System.Diagnostics.Debug.WriteLine("Error splitting '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
 
 				If StCommand Like "* on *:*" Then
@@ -843,24 +861,24 @@ Public Class HFSM(Of TState, TEvent)
 			ElseIf StCommand Like "defaulttransaction:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return LoadFileError(FInput)
+					Return LoadFileError(InputStream)
 				End If
 				MyStateConfiguration.DefaultTransaction(StParameter)
 
 			Else
 				System.Diagnostics.Debug.WriteLine("Unknown command '" & StLine & "'")
-				Return LoadFileError(FInput)
+				Return LoadFileError(InputStream)
 
 			End If
 		Loop
 
-		FInput.Close()
+		InputStream.Close()
 
 		Return NewClsFsm
 
 	End Function
 
-	Private Shared Function LoadFileError(ByVal FInput As System.IO.StreamReader) As HFSM(Of String, String)
+	Private Shared Function LoadFileError(ByVal FInput As System.IO.TextReader) As HFSM(Of String, String)
 		FInput.Close()
 		Return Nothing
 	End Function
