@@ -59,16 +59,18 @@ Public Class HFSM(Of TState, TEvent)
 	Friend Event OnExecute(ByVal ExecuteState As TState)
 #End If
 
-	Private VtStati As System.Collections.Generic.List(Of ClsState)
+	Private VtStates As System.Collections.Generic.List(Of ClsState)
 	Private CurrState As TState
 	Private PrvInitialState As TState
 	Private PrvFsmName As String
 	Private PrvFsmHeader As String
 	Private PrvClassCallback As Object
+	Private VtSubFSM As System.Collections.Generic.List(Of HFSM(Of TState, TEvent))
 
 	Friend Sub New(ByVal FsmName As String, ByVal InitialState As TState)
 		PrvFsmName = FsmName
-		VtStati = New System.Collections.Generic.List(Of ClsState)
+		VtStates = New System.Collections.Generic.List(Of ClsState)
+		VtSubFSM = New System.Collections.Generic.List(Of HFSM(Of TState, TEvent))
 		CurrState = InitialState
 		PrvInitialState = InitialState
 
@@ -78,6 +80,7 @@ Public Class HFSM(Of TState, TEvent)
 
 	Private Class ClsTransaction
 		Friend TrEvent As TEvent
+		Friend TrStateEvent As TState
 		Friend TrDestState As TState
 		Friend TrVerifyCallback As VerifyCallback
 	End Class
@@ -87,13 +90,9 @@ Public Class HFSM(Of TState, TEvent)
 		Friend OnEntry As EntryCallback
 		Friend OnExit As ExitCallback
 		Friend OnExecute As ExecuteCallback
+		Friend OnSubFsm As HFSM(Of TState, TEvent)
 		Friend TransactionList As System.Collections.Generic.List(Of ClsTransaction)
 		Friend DefaultTransaction As ClsTransaction
-
-		'For late associations
-		Friend OnEntryString As String
-		Friend OnExitString As String
-		Friend OnExecuteString As String
 
 		Friend Sub New()
 			TransactionList = New System.Collections.Generic.List(Of ClsTransaction)
@@ -106,7 +105,7 @@ Public Class HFSM(Of TState, TEvent)
 	Private Function GetState(ByVal SearchState As TState) As ClsState
 		Dim NewState As ClsState
 
-		For Each NewState In VtStati
+		For Each NewState In VtStates
 			If NewState.CurrState.Equals(SearchState) Then
 				Return NewState
 			End If
@@ -115,7 +114,7 @@ Public Class HFSM(Of TState, TEvent)
 		NewState = New ClsState() With {
 			.CurrState = SearchState
 		}
-		VtStati.Add(NewState)
+		VtStates.Add(NewState)
 
 		Return NewState
 
@@ -131,11 +130,16 @@ Public Class HFSM(Of TState, TEvent)
 		Friend ParentFSM As HFSM(Of TState, TEvent)
 
 		Friend Function OnEntry(ByVal FunctionCallback As EntryCallback) As StateConfiguration
-			ParentFSM.GetState(Me.ConfigState).OnEntry = FunctionCallback
+			ParentFSM.GetState(ConfigState).OnEntry = FunctionCallback
 			Return Me
 		End Function
-		Friend Function OnEntry(ByVal FunctionCallback As String) As StateConfiguration
-			ParentFSM.GetState(Me.ConfigState).OnEntryString = FunctionCallback
+		Friend Function OnEntry(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
+			Try
+				ParentFSM.GetState(ConfigState).OnEntry = TryCast(System.Delegate.CreateDelegate(GetType(EntryCallback), ClassCallback, FunctionCallback), EntryCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnEntry function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
 			Return Me
 		End Function
 
@@ -143,8 +147,13 @@ Public Class HFSM(Of TState, TEvent)
 			ParentFSM.GetState(Me.ConfigState).OnExit = FunctionCallback
 			Return Me
 		End Function
-		Friend Function OnExit(ByVal FunctionCallback As String) As StateConfiguration
-			ParentFSM.GetState(Me.ConfigState).OnExitString = FunctionCallback
+		Friend Function OnExit(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
+			Try
+				ParentFSM.GetState(ConfigState).OnExit = TryCast(System.Delegate.CreateDelegate(GetType(ExitCallback), ClassCallback, FunctionCallback), ExitCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnExit function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
 			Return Me
 		End Function
 
@@ -152,8 +161,18 @@ Public Class HFSM(Of TState, TEvent)
 			ParentFSM.GetState(Me.ConfigState).OnExecute = FunctionCallback
 			Return Me
 		End Function
-		Friend Function OnExecute(ByVal FunctionCallback As String) As StateConfiguration
-			ParentFSM.GetState(Me.ConfigState).OnExecuteString = FunctionCallback
+		Friend Function OnExecute(ByVal FunctionCallback As String, ByVal ClassCallback As Object) As StateConfiguration
+			Try
+				ParentFSM.GetState(ConfigState).OnExecute = TryCast(System.Delegate.CreateDelegate(GetType(ExecuteCallback), ClassCallback, FunctionCallback), ExecuteCallback)
+			Catch
+				System.Diagnostics.Debug.WriteLine("Cannot find OnExecute function '" & FunctionCallback & "'")
+				Return Nothing
+			End Try
+			Return Me
+		End Function
+
+		Friend Function OnSubFSM(ByVal FsmCallback As HFSM(Of TState, TEvent)) As StateConfiguration
+			ParentFSM.GetState(Me.ConfigState).OnSubFsm = FsmCallback
 			Return Me
 		End Function
 
@@ -162,6 +181,19 @@ Public Class HFSM(Of TState, TEvent)
 				.RemoveAll(Function(T) T.TrEvent.Equals(EventTrigger))
 				.Add(New ClsTransaction With {
 					 .TrEvent = EventTrigger,
+					 .TrDestState = DestinationState,
+					 .TrVerifyCallback = VerifyFunction
+				})
+			End With
+			Return Me
+
+		End Function
+		'Used fot SubFSM transaction
+		Friend Function StateTransaction(ByVal StateTrigger As TState, ByVal DestinationState As TState, Optional VerifyFunction As VerifyCallback = Nothing) As StateConfiguration
+			With ParentFSM.GetState(Me.ConfigState).TransactionList
+				.RemoveAll(Function(T) T.TrStateEvent.Equals(StateTrigger))
+				.Add(New ClsTransaction With {
+					 .TrStateEvent = StateTrigger,
 					 .TrDestState = DestinationState,
 					 .TrVerifyCallback = VerifyFunction
 				})
@@ -202,12 +234,21 @@ Public Class HFSM(Of TState, TEvent)
 		Dim PrvState As ClsState
 		Dim PrvTransaction As ClsTransaction
 
-		PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+		PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 		If Not PrvState Is Nothing Then
-			PrvTransaction = PrvState.TransactionList.Find(Function(T) T.TrEvent.Equals(EventTrigger))
-			If PrvTransaction Is Nothing Then
-				PrvTransaction = PrvState.DefaultTransaction
+
+			'Search a transaction
+			If Not PrvState.OnSubFsm Is Nothing Then
+				'SubFSM transaction
+				PrvTransaction = PrvState.TransactionList.Find(Function(T) T.TrStateEvent.Equals(PrvState.OnSubFsm.CurrState))
+			Else
+				'Standard transaction
+				PrvTransaction = PrvState.TransactionList.Find(Function(T) T.TrEvent.Equals(EventTrigger))
+				If PrvTransaction Is Nothing Then
+					PrvTransaction = PrvState.DefaultTransaction
+				End If
 			End If
+
 			If Not PrvTransaction Is Nothing Then
 				Dim ChangeState As Boolean
 
@@ -228,9 +269,6 @@ Public Class HFSM(Of TState, TEvent)
 					If Not PrvState.OnExit Is Nothing Then
 						PrvState.OnExit(CurrState)
 					End If
-					If PrvState.OnExitString <> "" Then
-						PrvClassCallback.GetType.GetMethod(PrvState.OnExitString, CType(-1, System.Reflection.BindingFlags)).Invoke(Me, {CurrState})
-					End If
 
 					'Change state
 					CurrState = PrvTransaction.TrDestState
@@ -239,13 +277,14 @@ Public Class HFSM(Of TState, TEvent)
 #If GENERATE_EVENTS Then
 					RaiseEvent OnEntry(CurrState)
 #End If
-					PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+					PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 					If Not PrvState Is Nothing Then
 						If Not PrvState.OnEntry Is Nothing Then
 							PrvState.OnEntry(CurrState)
 						End If
-						If PrvState.OnEntryString <> "" Then
-							PrvClassCallback.GetType.GetMethod(PrvState.OnEntryString, CType(-1, System.Reflection.BindingFlags)).Invoke(Me, {CurrState})
+						'Reset SubFSM
+						If Not PrvState.OnSubFsm Is Nothing Then
+							PrvState.OnSubFsm.CurrState = PrvState.OnSubFsm.PrvInitialState
 						End If
 					End If
 				End If
@@ -264,7 +303,7 @@ Public Class HFSM(Of TState, TEvent)
 		'
 		'If state callback is nothing, try to use default transaction
 
-		PrvState = VtStati.Find(Function(T) T.CurrState.Equals(CurrState))
+		PrvState = VtStates.Find(Function(T) T.CurrState.Equals(CurrState))
 		If Not PrvState Is Nothing Then
 
 #If GENERATE_EVENTS Then
@@ -274,11 +313,10 @@ Public Class HFSM(Of TState, TEvent)
 				Parameters = Nothing
 				PrvEvent = PrvState.OnExecute(CurrState, Parameters)
 				Fire(PrvEvent, Parameters)
-			ElseIf PrvState.OnExecuteString <> "" Then
-				Parameters = Nothing
-				PrvEvent = CType(PrvClassCallback.GetType.GetMethod(PrvState.OnExecuteString, CType(-1, System.Reflection.BindingFlags)).Invoke(PrvClassCallback, {CurrState, Nothing}), TEvent)
-				Fire(PrvEvent, Parameters)
 			Else
+				If Not PrvState.OnSubFsm Is Nothing Then
+					PrvState.OnSubFsm.Evolve()
+				End If
 				'Try to use default transaction
 				Fire(Nothing)
 			End If
@@ -293,10 +331,75 @@ Public Class HFSM(Of TState, TEvent)
 
 #Region " GRAPHVIZ CODE GENERATOR "
 
-	Public Function ToGraphviz(ByVal NewLine As String) As String
+	Private Function PrvGraphvizFsm(ByVal CurrFsm As HFSM(Of TState, TEvent), ByVal NewLine As String, ByRef ClusterID As Integer) As String
 		Dim StRes As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
-		Dim LineStyle As String
+
+		StRes = ""
+
+		StRes &= NewLine
+		StRes &= NewLine
+		StRes &= NewTab & "subgraph cluster" & ClusterID & " {" & NewLine
+
+		For Each TmpState In CurrFsm.VtStates
+
+			'Generate a state description string like "a[label="state description"];"
+			StRes &= NewTab & NewTab & TmpState.CurrState.ToString() & "[label="""
+			If Not TmpState.OnEntry Is Nothing Then StRes &= "[" & TmpState.OnEntry.Method.Name() & "()]\n"
+			StRes &= TmpState.CurrState.ToString() & "\n"
+			If Not TmpState.OnExecute Is Nothing Then StRes &= TmpState.OnExecute.Method.Name() & "()\n"
+			If Not TmpState.OnSubFsm Is Nothing Then StRes &= "<" & TmpState.OnSubFsm.PrvFsmName & ">\n"
+			If Not TmpState.OnExit Is Nothing Then StRes &= "[" & TmpState.OnExit.Method.Name() & "()]\n"
+			StRes &= """"
+			If Not TmpState.OnSubFsm Is Nothing Then StRes &= ",style=bold"
+			StRes &= "];" & NewLine
+
+			For Each TmpTransaction In TmpState.TransactionList
+				Dim StLineFrom As String
+				Dim StLineTo As String
+				Dim StLineAction As String
+				Dim StLineStyle As String
+
+				'Generate a transaction description string like "a -> b[label="transaction condition"];"
+				StLineFrom = TmpState.CurrState.ToString()
+				StLineTo = TmpTransaction.TrDestState.ToString()
+				StLineAction = ""
+				StLineStyle = ""
+				If Not TmpTransaction.TrEvent Is Nothing Then
+					StLineAction = TmpTransaction.TrEvent.ToString()
+				ElseIf Not TmpTransaction.TrStateEvent Is Nothing Then
+					StLineAction = TmpTransaction.TrStateEvent.ToString()
+					StLineStyle = ",style=bold"
+				End If
+				StRes &= NewTab & NewTab & StLineFrom & " -> " & StLineTo & "[label=""" & StLineAction & """" & StLineStyle & "];" & NewLine
+			Next
+
+			'Generate default transaction description string like "a -> b[label="*"];"
+			If Not TmpState.DefaultTransaction Is Nothing Then
+				Dim StLineStyle As String
+
+				StLineStyle = ""
+				If TmpState.TransactionList.Count > 0 Then StLineStyle = ",style=dotted"
+				StRes &= NewTab & NewTab & TmpState.CurrState.ToString() & " -> " & TmpState.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & StLineStyle & "];" & NewLine
+			End If
+		Next
+
+		'Close subgraph
+		StRes &= NewTab & NewTab & "label = """ & CurrFsm.PrvFsmName & """;" & NewLine
+		StRes &= NewTab & "}" & NewLine
+
+		'Call for every SubFSM
+		For Each TmpSubFsm In CurrFsm.VtSubFSM
+			ClusterID += 1
+			StRes &= PrvGraphvizFsm(TmpSubFsm, NewLine, ClusterID)
+		Next
+
+		Return StRes
+
+	End Function
+
+	Public Function ToGraphviz(ByVal NewLine As String) As String
+		Dim StRes As String
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
 		StRes = ""
@@ -304,32 +407,9 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= NewLine
 		StRes &= "digraph {" & NewLine
 
-		For Each TmpStato In VtStati
+		StRes &= PrvGraphvizFsm(Me, NewLine, 0)
 
-			'Generate a state description string like "a[label="state description"];"
-			StRes &= NewTab & TmpStato.CurrState.ToString() & "[label="""
-			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
-			If Not TmpStato.OnEntryString Is Nothing Then StRes &= "[" & TmpStato.OnEntryString & "()]\n"
-			StRes &= TmpStato.CurrState.ToString() & "\n"
-			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
-			If Not TmpStato.OnExecuteString Is Nothing Then StRes &= TmpStato.OnExecuteString & "()\n"
-			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
-			If Not TmpStato.OnExitString Is Nothing Then StRes &= "[" & TmpStato.OnExitString & "()]\n"
-			StRes &= """];" & NewLine
-
-			For Each TmpTransaction In TmpStato.TransactionList
-				'Generate a transaction description string like "a -> b[label="transaction condition"];"
-				StRes &= NewTab & TmpStato.CurrState.ToString() & " -> " & TmpTransaction.TrDestState.ToString() & "[label=""" & TmpTransaction.TrEvent.ToString() & """];" & NewLine
-			Next
-
-			'Generate default transaction description string like "a -> b[label="*"];"
-			If Not TmpStato.DefaultTransaction Is Nothing Then
-				LineStyle = ""
-				If TmpStato.TransactionList.Count > 0 Then LineStyle = ",style=""dotted"""
-				StRes &= NewTab & TmpStato.CurrState.ToString() & " -> " & TmpStato.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & LineStyle & "];" & NewLine
-			End If
-		Next
-
+		StRes &= NewLine
 		StRes &= "}"
 
 		Return StRes
@@ -341,49 +421,92 @@ Public Class HFSM(Of TState, TEvent)
 #Region " C CODE GENERATOR "
 
 	Public Function ToC_FSMHeader(ByVal NewLine As String) As String
+		Return ToC_FSMHeader(NewLine, Me)
+	End Function
+
+	Public Function ToC_FSMHeader(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
 		Dim StRes As String
+		Dim VarEnStatesName As String
+		Dim VarEnEventsName As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim ListEvent As System.Collections.Generic.List(Of TEvent)
+		Dim ListStates As System.Collections.Generic.List(Of TState)
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
 		StRes = ""
 
 		StRes &= NewLine
 
-		StRes &= "typedef enum {" & NewLine
-		For Each TmpState In VtStati
-			StRes &= NewTab & TmpState.CurrState.ToString() & "," & NewLine
+		VarEnStatesName = CurrFSM.PrvFsmName & "_EnStates"
+		VarEnEventsName = CurrFSM.PrvFsmName & "_EnEvents"
+
+		'Add states to temporary list
+		ListStates = New System.Collections.Generic.List(Of TState)
+		For Each TmpState In CurrFSM.VtStates
+			If ListStates.Contains(TmpState.CurrState) = False Then ListStates.Add(TmpState.CurrState)
+			If Not TmpState.DefaultTransaction Is Nothing AndAlso ListStates.Contains(TmpState.DefaultTransaction.TrDestState) = False Then
+				ListStates.Add(TmpState.DefaultTransaction.TrDestState)
+			End If
+			For Each TmpTransaction In TmpState.TransactionList
+				If Not TmpTransaction.TrDestState Is Nothing AndAlso ListStates.Contains(TmpTransaction.TrDestState) = False Then
+					ListStates.Add(TmpTransaction.TrDestState)
+				End If
+			Next
 		Next
-		StRes &= "} EnStates;" & NewLine
+
+		'Put states to file
+		StRes &= "typedef enum {" & NewLine
+		For Each TmpState In ListStates
+			StRes &= NewTab & TmpState.ToString() & "," & NewLine
+		Next
+		StRes &= "} " & VarEnStatesName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "typedef enum {" & NewLine
+		'Add events to temporary list
 		ListEvent = New System.Collections.Generic.List(Of TEvent)
-		For Each TmpState In VtStati
+		For Each TmpState In CurrFSM.VtStates
 			For Each TmpTransaction In TmpState.TransactionList
-				If ListEvent.Contains(TmpTransaction.TrEvent) = False Then
+				If Not TmpTransaction.TrEvent Is Nothing AndAlso ListEvent.Contains(TmpTransaction.TrEvent) = False Then
 					ListEvent.Add(TmpTransaction.TrEvent)
 				End If
 			Next
 		Next
+
+		'Put events to file
+		StRes &= "typedef enum {" & NewLine
 		For Each TmpEvent In ListEvent
 			StRes &= NewTab & TmpEvent.ToString() & "," & NewLine
 		Next
-		StRes &= "} EnEvents;" & NewLine
+		StRes &= "} " & VarEnEventsName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "void FSM_" & PrvFsmName & "_Restart(void);" & NewLine
-		StRes &= "EnStates FSM_" & PrvFsmName & "(void * Parameters);" & NewLine
+		StRes &= "void FSM_" & CurrFSM.PrvFsmName & "_Restart(void);" & NewLine
+		StRes &= VarEnStatesName & " FSM_" & CurrFSM.PrvFsmName & "(void * Parameters);" & NewLine
 
 		StRes &= NewLine
 		StRes &= NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMHeader(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
 
 		Return StRes
 
 	End Function
 
 	Public Function ToC_FSMSource(ByVal NewLine As String) As String
+		Return ToC_FSMSource(NewLine, Me)
+	End Function
+
+	Private Function ToC_FSMSource(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
 		Dim StRes As String
+		Dim VarEnStatesName As String
+		Dim VarEnEventsName As String
+		Dim VarStateEntryName As String
+		Dim VarCurrStateName As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
@@ -391,68 +514,76 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewLine
 
-		StRes &= PrvFsmHeader
+		StRes &= CurrFSM.PrvFsmHeader
 		StRes &= NewLine
 
-		StRes &= "static unsigned char StateEntry = 1;" & NewLine
-		StRes &= "static EnStates CurrState;" & NewLine
+		VarEnStatesName = CurrFSM.PrvFsmName & "_EnStates"
+		VarEnEventsName = CurrFSM.PrvFsmName & "_EnEvents"
+		VarStateEntryName = CurrFSM.PrvFsmName & "_StateEntry"
+		VarCurrStateName = CurrFSM.PrvFsmName & "_CurrState"
+		StRes &= "static unsigned char " & VarStateEntryName & " = 1;" & NewLine
+		StRes &= "static " & VarEnStatesName & " " & VarCurrStateName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "void FSM_" & PrvFsmName & "_Restart(void){" & NewLine
-		StRes &= NewTab & "CurrState = " & PrvInitialState.ToString() & ";" & NewLine
+		StRes &= "void FSM_" & CurrFSM.PrvFsmName & "_Restart(void){" & NewLine
+		StRes &= NewTab & VarCurrStateName & " = " & PrvInitialState.ToString() & ";" & NewLine
 		StRes &= "}" & NewLine
 		StRes &= NewLine
 
-		StRes &= "EnStates FSM_" & PrvFsmName & "(void * Parameters){" & NewLine
+		StRes &= VarEnStatesName & " FSM_" & CurrFSM.PrvFsmName & "(void * Parameters){" & NewLine
 
-		StRes &= NewTab & "switch (CurrState){" & NewLine
+		StRes &= NewTab & "switch (" & VarCurrStateName & "){" & NewLine
 		StRes &= NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In CurrFSM.VtStates
 
-			StRes &= NewTab & NewTab & "case " & TmpStato.CurrState.ToString() & ":{" & NewLine
-			StRes &= NewTab & NewTab & NewTab & "EnEvents TmpEvent;" & NewLine
+			StRes &= NewTab & NewTab & "case " & TmpState.CurrState.ToString() & ":{" & NewLine
+			StRes &= NewTab & NewTab & NewTab & VarEnEventsName & " TmpEvent;" & NewLine
+			StRes &= NewLine
 
 			'OnEntry
-			If Not TmpStato.OnEntry Is Nothing Or Not TmpStato.OnEntryString Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "if (StateEntry == 1){" & NewLine
-				If Not TmpStato.OnEntry Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnEntry.Method.Name() & "(Parameters);" & NewLine
-				If Not TmpStato.OnEntryString Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnEntryString & "(Parameters);" & NewLine
-				StRes &= NewTab & NewTab & NewTab & NewTab & "StateEntry = 0;" & NewLine
+			If Not TmpState.OnEntry Is Nothing Or Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "if (" & VarStateEntryName & " == 1){" & NewLine
+				If Not TmpState.OnEntry Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnEntry.Method.Name() & "(Parameters);" & NewLine
+				If Not TmpState.OnSubFsm Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & TmpState.OnSubFsm.PrvFsmName & "_Restart();" & NewLine
+				StRes &= NewTab & NewTab & NewTab & NewTab & VarStateEntryName & " = 0;" & NewLine
 				StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 				StRes &= NewLine
 			End If
 
 			'OnExecuting
-			If TmpStato.OnExecute Is Nothing And TmpStato.OnExecuteString Is Nothing Then
-				If Not TmpStato.DefaultTransaction Is Nothing Then
-					StRes &= NewTab & NewTab & NewTab & "TmpEvent = " & TmpStato.DefaultTransaction.TrDestState.ToString() & ";" & NewLine
-				End If
-			ElseIf Not TmpStato.OnExecute Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnExecute.Method.Name() & "(Parameters);" & NewLine
-			ElseIf Not TmpStato.OnExecuteString Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnExecuteString & "(Parameters);" & NewLine
+			If Not TmpState.OnExecute Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnExecute.Method.Name() & "(Parameters);" & NewLine
+			End If
+
+			'SubFSM
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & TmpState.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
 			End If
 
 			'Evaluate transaction
 			StRes &= NewTab & NewTab & NewTab & "switch (TmpEvent){" & NewLine
-			For Each TmpTransaction In TmpStato.TransactionList
-				StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+			For Each TmpTransaction In TmpState.TransactionList
+				'SubFSM
+				If Not TmpState.OnSubFsm Is Nothing Then
+					'SubFSM or normal transaction
+					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrStateEvent.ToString() & ":{ " & VarCurrStateName & " = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				Else
+					'Normal transaction
+					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ " & VarCurrStateName & " = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				End If
 			Next
-			If Not TmpStato.DefaultTransaction Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ CurrState = " & TmpStato.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
+			If Not TmpState.DefaultTransaction Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ " & VarCurrStateName & " = " & TmpState.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
 			End If
 			StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 			StRes &= NewLine
 
 			'OnExit
-			StRes &= NewTab & NewTab & NewTab & "if (CurrState != " & TmpStato.CurrState.ToString() & "){" & NewLine
-			If Not TmpStato.OnExit Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnExit.Method.Name() & "(Parameters);" & NewLine
+			StRes &= NewTab & NewTab & NewTab & "if (" & VarCurrStateName & " != " & TmpState.CurrState.ToString() & "){" & NewLine
+			If Not TmpState.OnExit Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnExit.Method.Name() & "(Parameters);" & NewLine
 			End If
-			If Not TmpStato.OnExitString Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnExitString & "(Parameters);" & NewLine
-			End If
-			StRes &= NewTab & NewTab & NewTab & NewTab & "StateEntry = 1;" & NewLine
+			StRes &= NewTab & NewTab & NewTab & NewTab & VarStateEntryName & " = 1;" & NewLine
 			StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 			StRes &= NewLine
 
@@ -464,8 +595,74 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewTab & "}" & NewLine
 
-		StRes &= NewTab & "return CurrState;" & NewLine
+		StRes &= NewTab & "return " & VarCurrStateName & ";" & NewLine
 		StRes &= "}" & NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMSource(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
+
+		Return StRes
+
+	End Function
+
+	Public Function ToC_FSMMain(ByVal NewLine As String) As String
+		Return ToC_FSMMain(NewLine, Me)
+	End Function
+
+	Private Function ToC_FSMMain(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
+		Dim StRes As String
+		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
+		Dim FunctionPrefix As String
+		Dim ListFunctions As System.Collections.Generic.List(Of String)
+
+		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
+		StRes = ""
+
+		If CurrFSM.PrvFsmHeader <> "" Then
+			StRes &= NewLine
+			StRes &= CurrFSM.PrvFsmHeader & NewLine
+			StRes &= NewLine
+			StRes &= "int main(){" & NewLine
+			StRes &= "}" & NewLine
+			StRes &= NewLine
+		End If
+
+		'Add states to temporary list
+		ListFunctions = New System.Collections.Generic.List(Of String)
+		FunctionPrefix = "FSM_" & CurrFSM.PrvFsmName & "_"
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnEntry Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnEntry.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnEntry.Method.Name)
+			End If
+			If Not TmpState.OnExecute Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnExecute.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnExecute.Method.Name)
+			End If
+			If Not TmpState.OnExit Is Nothing AndAlso ListFunctions.Contains(FunctionPrefix & TmpState.OnExit.Method.Name) = False Then
+				ListFunctions.Add(FunctionPrefix & TmpState.OnExit.Method.Name)
+			End If
+		Next
+
+		'Add empty functions
+		For Each TmpFunction In ListFunctions
+			StRes &= CurrFSM.PrvFsmName & "_EnStates " & TmpFunction.ToString() & "(void * Parameters){" & NewLine
+			StRes &= NewTab & "return 0x00;" & NewLine
+			StRes &= "}" & NewLine
+			StRes &= NewLine
+		Next
+		StRes &= NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStates
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMMain(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
+
+		StRes &= NewLine
 
 		Return StRes
 
@@ -488,19 +685,16 @@ Public Class HFSM(Of TState, TEvent)
 
 		'State list
 		StRes &= "[" & NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In VtStates
 
 			'Generate a state description string like "{ key: "state name", text: "state description" },"
 			StRes &= NewTab & "{ "
-			StRes &= " key: """ & TmpStato.CurrState.ToString() & """ "
+			StRes &= " key: """ & TmpState.CurrState.ToString() & """ "
 			StRes &= ", text: """
-			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
-			If Not TmpStato.OnEntryString Is Nothing Then StRes &= "[" & TmpStato.OnEntryString & "()]\n"
-			StRes &= TmpStato.CurrState.ToString() & "\n"
-			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
-			If Not TmpStato.OnExecuteString Is Nothing Then StRes &= TmpStato.OnExecuteString & "()\n"
-			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
-			If Not TmpStato.OnExitString Is Nothing Then StRes &= "[" & TmpStato.OnExitString & "()]\n"
+			If Not TmpState.OnEntry Is Nothing Then StRes &= "[" & TmpState.OnEntry.Method.Name() & "()]\n"
+			StRes &= TmpState.CurrState.ToString() & "\n"
+			If Not TmpState.OnExecute Is Nothing Then StRes &= TmpState.OnExecute.Method.Name() & "()\n"
+			If Not TmpState.OnExit Is Nothing Then StRes &= "[" & TmpState.OnExit.Method.Name() & "()]\n"
 			StRes &= """ }," & NewLine
 
 		Next
@@ -508,18 +702,18 @@ Public Class HFSM(Of TState, TEvent)
 
 		'Transaction list
 		StRes &= ", [" & NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In VtStates
 
-			For Each TmpTransaction In TmpStato.TransactionList
+			For Each TmpTransaction In TmpState.TransactionList
 				'Generate a transaction description string like "{ from: "state key", to: "state key",  text: "transaction condition" },"
-				StRes &= NewTab & "{ from: """ & TmpStato.CurrState.ToString() & """, to: """ & TmpTransaction.TrDestState.ToString() & """, text: """ & TmpTransaction.TrEvent.ToString() & """ }," & NewLine
+				StRes &= NewTab & "{ from: """ & TmpState.CurrState.ToString() & """, to: """ & TmpTransaction.TrDestState.ToString() & """, text: """ & TmpTransaction.TrEvent.ToString() & """ }," & NewLine
 			Next
 
 			'Generate default transaction description string like "{ from: "state key", to: "state key",  text: "*" },"
-			If Not TmpStato.DefaultTransaction Is Nothing Then
+			If Not TmpState.DefaultTransaction Is Nothing Then
 				LineStyle = ""
-				If TmpStato.TransactionList.Count > 0 Then LineStyle = ", color: ""gray"""
-				StRes &= NewTab & "{ from: """ & TmpStato.CurrState.ToString() & """, to: """ & TmpStato.DefaultTransaction.TrDestState.ToString() & """, text: """ & "*" & """ " & LineStyle & " }," & NewLine
+				If TmpState.TransactionList.Count > 0 Then LineStyle = ", color: ""gray"""
+				StRes &= NewTab & "{ from: """ & TmpState.CurrState.ToString() & """, to: """ & TmpState.DefaultTransaction.TrDestState.ToString() & """, text: """ & "*" & """ " & LineStyle & " }," & NewLine
 			End If
 		Next
 		StRes &= "]);"
@@ -535,6 +729,7 @@ Public Class HFSM(Of TState, TEvent)
 	Public Shared Function LoadFromFile(ByVal FilePath As String, ByVal ClassCallback As Object, ByRef MyStates As String(), ByRef MyEvents As String()) As HFSM(Of String, String)
 		Dim NewClsFsm As HFSM(Of String, String)
 		Dim FInput As System.IO.StreamReader
+		Dim MyFsmConfiguration As HFSM(Of String, String)
 		Dim MyStateConfiguration As HFSM(Of String, String).StateConfiguration
 
 		MyStates = New String() {}
@@ -542,6 +737,7 @@ Public Class HFSM(Of TState, TEvent)
 		NewClsFsm = New HFSM(Of String, String)("", "") With {
 			.PrvClassCallback = ClassCallback
 		}
+		MyFsmConfiguration = NewClsFsm
 		MyStateConfiguration = Nothing
 
 		FInput = New System.IO.StreamReader(FilePath)
@@ -561,10 +757,18 @@ Public Class HFSM(Of TState, TEvent)
 			If StLine.IndexOf(":") >= 0 Then StParameter = StLine.Substring(StLine.IndexOf(":") + 1).Trim
 
 			If StCommand Like "fsm:*" Then
-				NewClsFsm.PrvFsmName = StParameter
+				MyFsmConfiguration.PrvFsmName = StParameter
+
+			ElseIf StCommand Like "subfsm:*" Then
+				If NewClsFsm.VtSubFSM.Exists(Function(T) T.PrvFsmName = StParameter) Then
+					MyFsmConfiguration = NewClsFsm.VtSubFSM.Find(Function(T) T.PrvFsmName = StParameter)
+				Else
+					MyFsmConfiguration = New HFSM(Of String, String)(StParameter, Nothing)
+					NewClsFsm.VtSubFSM.Add(MyFsmConfiguration)
+				End If
 
 			ElseIf StCommand Like "fsmheader:*" Then
-				NewClsFsm.PrvFsmHeader &= StParameter & System.Text.Encoding.ASCII.GetChars({&HA})
+				MyFsmConfiguration.PrvFsmHeader &= StParameter & System.Text.Encoding.ASCII.GetChars({&HA})
 
 			ElseIf StCommand Like "initialstate:*" Then
 				'Add new state, if necessary ;)
@@ -572,8 +776,8 @@ Public Class HFSM(Of TState, TEvent)
 					ReDim Preserve MyStates(MyStates.Length)
 					MyStates(MyStates.Length - 1) = StParameter
 				End If
-				NewClsFsm.PrvInitialState = StParameter
-				NewClsFsm.CurrState = StParameter
+				MyFsmConfiguration.PrvInitialState = StParameter
+				MyFsmConfiguration.CurrState = StParameter
 
 			ElseIf StCommand Like "state:*" Then
 				'Add new state, if necessary ;)
@@ -581,76 +785,71 @@ Public Class HFSM(Of TState, TEvent)
 					ReDim Preserve MyStates(MyStates.Length)
 					MyStates(MyStates.Length - 1) = StParameter
 				End If
-				MyStateConfiguration = NewClsFsm.Configure(StParameter)
+				MyStateConfiguration = MyFsmConfiguration.Configure(StParameter)
 
 			ElseIf StCommand Like "onentry:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				''(optional) Verify if callback exists
-				'If ClassCallback.GetType.GetMethod(StParameter, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-				'	System.Diagnostics.Debug.WriteLine("Function not found as requested in '" & StLine & "'")
-				'	Stop
-				'	Return Nothing
-				'End If
-				MyStateConfiguration.OnEntry(StParameter)
+				If MyStateConfiguration.OnEntry(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
 			ElseIf StCommand Like "onexit:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				''(optional) Verify if callback exists
-				'If ClassCallback.GetType.GetMethod(StParameter, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-				'	System.Diagnostics.Debug.WriteLine("Function not found as requested in '" & StLine & "'")
-				'	Stop
-				'	Return Nothing
-				'End If
-				MyStateConfiguration.OnExit(StParameter)
+				If MyStateConfiguration.OnExit(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
 			ElseIf StCommand Like "onexecute:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				''(optional) Verify if callback exists
-				'If ClassCallback.GetType.GetMethod(StParameter, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-				'	System.Diagnostics.Debug.WriteLine("Function not found as requested in '" & StLine & "'")
-				'	Stop
-				'	Return Nothing
-				'End If
-				MyStateConfiguration.OnExecute(StParameter)
+				If MyStateConfiguration.OnExecute(StParameter, ClassCallback) Is Nothing Then Return LoadFileError(FInput)
 
-			ElseIf StCommand Like "transaction on *" Then
+			ElseIf StCommand Like "runsubfsm:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				If Not StCommand Like "* on *:*" Then
+				If Not NewClsFsm.VtSubFSM.Exists(Function(T) T.PrvFsmName = StParameter) Then
+					Dim PrvNewFsmConfiguration As HFSM(Of String, String)
+					PrvNewFsmConfiguration = New HFSM(Of String, String)(StParameter, Nothing)
+					NewClsFsm.VtSubFSM.Add(PrvNewFsmConfiguration)
+				End If
+				MyStateConfiguration.OnSubFSM(NewClsFsm.VtSubFSM.Find(Function(T) T.PrvFsmName = StParameter))
+
+			ElseIf StCommand Like "transaction on *" Or StCommand Like "transaction when *" Then
+				If MyStateConfiguration Is Nothing Then
+					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
+					Return LoadFileError(FInput)
+				End If
+				If Not StCommand Like "* on *:*" And Not StCommand Like "* when *:*" Then
 					System.Diagnostics.Debug.WriteLine("Error splitting '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
-				StLine = StLine.Substring(StCommand.IndexOf(" on ") + 4).Trim
-				StLine = StLine.Split(":"c)(0).Trim
-				MyStateConfiguration.Transaction(StLine, StParameter)
+
+				If StCommand Like "* on *:*" Then
+					StLine = StLine.Substring(StCommand.IndexOf(" on ") + 4).Trim
+					StLine = StLine.Split(":"c)(0).Trim
+					MyStateConfiguration.Transaction(StLine, StParameter)
+				ElseIf StCommand Like "* when *:*" Then
+					StLine = StLine.Substring(StCommand.IndexOf(" when ") + 6).Trim
+					StLine = StLine.Split(":"c)(0).Trim
+					MyStateConfiguration.StateTransaction(StLine, StParameter)
+				End If
 
 			ElseIf StCommand Like "defaulttransaction:*" Then
 				If MyStateConfiguration Is Nothing Then
 					System.Diagnostics.Debug.WriteLine("Error in '" & StLine & "'")
-					Stop
-					Return Nothing
+					Return LoadFileError(FInput)
 				End If
 				MyStateConfiguration.DefaultTransaction(StParameter)
 
 			Else
 				System.Diagnostics.Debug.WriteLine("Unknown command '" & StLine & "'")
-				Stop
-				Return Nothing
+				Return LoadFileError(FInput)
 
 			End If
 		Loop
@@ -661,41 +860,9 @@ Public Class HFSM(Of TState, TEvent)
 
 	End Function
 
-	Public Function CheckCallback() As Boolean
-		Dim RetVal As Boolean
-
-		RetVal = True
-		For Each TmpStato In VtStati
-
-			'Generate a state description string like "a[label="state description"];"
-			If Not TmpStato.OnEntryString Is Nothing Then
-				If PrvClassCallback.GetType.GetMethod(TmpStato.OnEntryString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-					System.Console.WriteLine("Unknown callback " & TmpStato.OnEntryString & "()")
-					RetVal = False
-				End If
-				'Must check function sign...
-			End If
-
-			If Not TmpStato.OnExecuteString Is Nothing Then
-				If PrvClassCallback.GetType.GetMethod(TmpStato.OnExecuteString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-					System.Console.WriteLine("Unknown callback " & TmpStato.OnExecuteString & "()")
-					RetVal = False
-				End If
-				'Must check function sign...
-			End If
-
-			If Not TmpStato.OnExitString Is Nothing Then
-				If PrvClassCallback.GetType.GetMethod(TmpStato.OnExitString, CType(-1, System.Reflection.BindingFlags)) Is Nothing Then
-					System.Console.WriteLine("Unknown callback " & TmpStato.OnExitString & "()")
-					RetVal = False
-				End If
-				'Must check function sign...
-			End If
-
-		Next
-
-		Return RetVal
-
+	Private Shared Function LoadFileError(ByVal FInput As System.IO.StreamReader) As HFSM(Of String, String)
+		FInput.Close()
+		Return Nothing
 	End Function
 
 #End Region

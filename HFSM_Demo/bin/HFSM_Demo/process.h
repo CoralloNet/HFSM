@@ -4,17 +4,34 @@ typedef enum {
 	PROCESS_READY,
 	PROCESS_RUNNING,
 	PROCESS_WAITING,
-} EnStates;
+	PROCESS_TERMINATED,
+} Process_EnStates;
 
 typedef enum {
 	EVENT_DISPATCH,
+	EVENT_IO_READY,
+} Process_EnEvents;
+
+void FSM_Process_Restart(void);
+Process_EnStates FSM_Process(void * Parameters);
+
+
+
+typedef enum {
+	DETAIL_INIT,
+	DETAIL_RUNNING,
+	DETAIL_INTERRUPT,
+	DETAIL_WAITING,
+	DETAIL_TERMINATED,
+} PROCESS_RUN_DETAIL_EnStates;
+
+typedef enum {
 	EVENT_INTERRUPT,
 	EVENT_IO_WAIT,
 	EVENT_EXIT,
-	EVENT_IO_READY,
-} EnEvents;
+} PROCESS_RUN_DETAIL_EnEvents;
 
-void FSM_Process_Restart(void);
-EnStates FSM_Process(void * Parameters);
+void FSM_PROCESS_RUN_DETAIL_Restart(void);
+PROCESS_RUN_DETAIL_EnStates FSM_PROCESS_RUN_DETAIL(void * Parameters);
 
 
