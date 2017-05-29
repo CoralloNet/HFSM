@@ -341,27 +341,27 @@ Public Class HFSM(Of TState, TEvent)
 		StRes &= NewLine
 		StRes &= NewTab & "subgraph cluster" & ClusterID & " {" & NewLine
 
-		For Each TmpStato In CurrFsm.VtStati
+		For Each TmpState In CurrFsm.VtStati
 
 			'Generate a state description string like "a[label="state description"];"
-			StRes &= NewTab & NewTab & TmpStato.CurrState.ToString() & "[label="""
-			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
-			StRes &= TmpStato.CurrState.ToString() & "\n"
-			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
-			If Not TmpStato.OnSubFsm Is Nothing Then StRes &= "<" & TmpStato.OnSubFsm.PrvFsmName & ">\n"
-			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
+			StRes &= NewTab & NewTab & TmpState.CurrState.ToString() & "[label="""
+			If Not TmpState.OnEntry Is Nothing Then StRes &= "[" & TmpState.OnEntry.Method.Name() & "()]\n"
+			StRes &= TmpState.CurrState.ToString() & "\n"
+			If Not TmpState.OnExecute Is Nothing Then StRes &= TmpState.OnExecute.Method.Name() & "()\n"
+			If Not TmpState.OnSubFsm Is Nothing Then StRes &= "<" & TmpState.OnSubFsm.PrvFsmName & ">\n"
+			If Not TmpState.OnExit Is Nothing Then StRes &= "[" & TmpState.OnExit.Method.Name() & "()]\n"
 			StRes &= """"
-			If Not TmpStato.OnSubFsm Is Nothing Then StRes &= ",style=bold"
+			If Not TmpState.OnSubFsm Is Nothing Then StRes &= ",style=bold"
 			StRes &= "];" & NewLine
 
-			For Each TmpTransaction In TmpStato.TransactionList
+			For Each TmpTransaction In TmpState.TransactionList
 				Dim StLineFrom As String
 				Dim StLineTo As String
 				Dim StLineAction As String
 				Dim StLineStyle As String
 
 				'Generate a transaction description string like "a -> b[label="transaction condition"];"
-				StLineFrom = TmpStato.CurrState.ToString()
+				StLineFrom = TmpState.CurrState.ToString()
 				StLineTo = TmpTransaction.TrDestState.ToString()
 				StLineAction = ""
 				StLineStyle = ""
@@ -375,12 +375,12 @@ Public Class HFSM(Of TState, TEvent)
 			Next
 
 			'Generate default transaction description string like "a -> b[label="*"];"
-			If Not TmpStato.DefaultTransaction Is Nothing Then
+			If Not TmpState.DefaultTransaction Is Nothing Then
 				Dim StLineStyle As String
 
 				StLineStyle = ""
-				If TmpStato.TransactionList.Count > 0 Then StLineStyle = ",style=dotted"
-				StRes &= NewTab & NewTab & TmpStato.CurrState.ToString() & " -> " & TmpStato.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & StLineStyle & "];" & NewLine
+				If TmpState.TransactionList.Count > 0 Then StLineStyle = ",style=dotted"
+				StRes &= NewTab & NewTab & TmpState.CurrState.ToString() & " -> " & TmpState.DefaultTransaction.TrDestState.ToString() & "[label=""" & "*" & """" & StLineStyle & "];" & NewLine
 			End If
 		Next
 
@@ -421,7 +421,13 @@ Public Class HFSM(Of TState, TEvent)
 #Region " C CODE GENERATOR "
 
 	Public Function ToC_FSMHeader(ByVal NewLine As String) As String
+		Return ToC_FSMHeader(NewLine, Me)
+	End Function
+
+	Public Function ToC_FSMHeader(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
 		Dim StRes As String
+		Dim VarEnStatesName As String
+		Dim VarEnEventsName As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 		Dim ListEvent As System.Collections.Generic.List(Of TEvent)
 
@@ -430,16 +436,18 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewLine
 
+		VarEnStatesName = CurrFSM.PrvFsmName & "_EnStates"
+		VarEnEventsName = CurrFSM.PrvFsmName & "_EnEvents"
 		StRes &= "typedef enum {" & NewLine
-		For Each TmpState In VtStati
+		For Each TmpState In CurrFSM.VtStati
 			StRes &= NewTab & TmpState.CurrState.ToString() & "," & NewLine
 		Next
-		StRes &= "} EnStates;" & NewLine
+		StRes &= "} " & VarEnStatesName & ";" & NewLine
 		StRes &= NewLine
 
 		StRes &= "typedef enum {" & NewLine
 		ListEvent = New System.Collections.Generic.List(Of TEvent)
-		For Each TmpState In VtStati
+		For Each TmpState In CurrFSM.VtStati
 			For Each TmpTransaction In TmpState.TransactionList
 				If Not TmpTransaction.TrEvent Is Nothing AndAlso ListEvent.Contains(TmpTransaction.TrEvent) = False Then
 					ListEvent.Add(TmpTransaction.TrEvent)
@@ -449,21 +457,36 @@ Public Class HFSM(Of TState, TEvent)
 		For Each TmpEvent In ListEvent
 			StRes &= NewTab & TmpEvent.ToString() & "," & NewLine
 		Next
-		StRes &= "} EnEvents;" & NewLine
+		StRes &= "} " & VarEnEventsName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "void FSM_" & PrvFsmName & "_Restart(void);" & NewLine
-		StRes &= "EnStates FSM_" & PrvFsmName & "(void * Parameters);" & NewLine
+		StRes &= "void FSM_" & CurrFSM.PrvFsmName & "_Restart(void);" & NewLine
+		StRes &= VarEnStatesName & " FSM_" & CurrFSM.PrvFsmName & "(void * Parameters);" & NewLine
 
 		StRes &= NewLine
 		StRes &= NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStati
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMHeader(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
 
 		Return StRes
 
 	End Function
 
 	Public Function ToC_FSMSource(ByVal NewLine As String) As String
+		Return ToC_FSMSource(NewLine, Me)
+	End Function
+
+	Private Function ToC_FSMSource(ByVal NewLine As String, ByVal CurrFSM As HFSM(Of TState, TEvent)) As String
 		Dim StRes As String
+		Dim VarEnStatesName As String
+		Dim VarEnEventsName As String
+		Dim VarStateEntryName As String
+		Dim VarCurrStateName As String
 		Dim NewTab As Char() = System.Text.Encoding.ASCII.GetChars({&H9})
 
 		If NewLine = "" Then NewLine = System.Text.Encoding.ASCII.GetChars({&HA})
@@ -471,68 +494,74 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewLine
 
-		StRes &= PrvFsmHeader
+		StRes &= CurrFSM.PrvFsmHeader
 		StRes &= NewLine
 
-		StRes &= "static unsigned char StateEntry = 1;" & NewLine
-		StRes &= "static EnStates CurrState;" & NewLine
+		VarEnStatesName = CurrFSM.PrvFsmName & "_EnStates"
+		VarEnEventsName = CurrFSM.PrvFsmName & "_EnEvents"
+		VarStateEntryName = CurrFSM.PrvFsmName & "_StateEntry"
+		VarCurrStateName = CurrFSM.PrvFsmName & "_CurrState"
+		StRes &= "static unsigned char " & VarStateEntryName & " = 1;" & NewLine
+		StRes &= "static " & VarEnStatesName & " " & VarCurrStateName & ";" & NewLine
 		StRes &= NewLine
 
-		StRes &= "void FSM_" & PrvFsmName & "_Restart(void){" & NewLine
-		StRes &= NewTab & "CurrState = " & PrvInitialState.ToString() & ";" & NewLine
+		StRes &= "void FSM_" & CurrFSM.PrvFsmName & "_Restart(void){" & NewLine
+		StRes &= NewTab & VarCurrStateName & " = " & PrvInitialState.ToString() & ";" & NewLine
 		StRes &= "}" & NewLine
 		StRes &= NewLine
 
-		StRes &= "EnStates FSM_" & PrvFsmName & "(void * Parameters){" & NewLine
+		StRes &= VarEnStatesName & " FSM_" & CurrFSM.PrvFsmName & "(void * Parameters){" & NewLine
 
-		StRes &= NewTab & "switch (CurrState){" & NewLine
+		StRes &= NewTab & "switch (" & VarCurrStateName & "){" & NewLine
 		StRes &= NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In CurrFSM.VtStati
 
-			StRes &= NewTab & NewTab & "case " & TmpStato.CurrState.ToString() & ":{" & NewLine
-			StRes &= NewTab & NewTab & NewTab & "EnEvents TmpEvent;" & NewLine
+			StRes &= NewTab & NewTab & "case " & TmpState.CurrState.ToString() & ":{" & NewLine
+			StRes &= NewTab & NewTab & NewTab & VarEnEventsName & " TmpEvent;" & NewLine
 
 			'OnEntry
-			If Not TmpStato.OnEntry Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "if (StateEntry == 1){" & NewLine
-				If Not TmpStato.OnEntry Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnEntry.Method.Name() & "(Parameters);" & NewLine
-				StRes &= NewTab & NewTab & NewTab & NewTab & "StateEntry = 0;" & NewLine
+			If Not TmpState.OnEntry Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "if (" & VarStateEntryName & " == 1){" & NewLine
+				If Not TmpState.OnEntry Is Nothing Then StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnEntry.Method.Name() & "(Parameters);" & NewLine
+				StRes &= NewTab & NewTab & NewTab & NewTab & VarStateEntryName & " = 0;" & NewLine
 				StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 				StRes &= NewLine
 			End If
 
 			'OnExecuting
-			If Not TmpStato.OnExecute Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnExecute.Method.Name() & "(Parameters);" & NewLine
+			If Not TmpState.OnExecute Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnExecute.Method.Name() & "(Parameters);" & NewLine
 			End If
 
 			'SubFSM
-			If Not TmpStato.OnSubFsm Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & PrvFsmName & "_" & TmpStato.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
-
-				For Each TmpTransaction In TmpStato.TransactionList
-					StRes &= NewTab & NewTab & NewTab & NewTab & "if (...) " & TmpTransaction.TrStateEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
-				Next
-
-			Else
-				'Evaluate transaction
-				StRes &= NewTab & NewTab & NewTab & "switch (TmpEvent){" & NewLine
-				For Each TmpTransaction In TmpStato.TransactionList
-					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ CurrState = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
-				Next
-				If Not TmpStato.DefaultTransaction Is Nothing Then
-					StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ CurrState = " & TmpStato.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
-				End If
-				StRes &= NewTab & NewTab & NewTab & "}" & NewLine
-				StRes &= NewLine
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & "TmpEvent = FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnSubFsm.PrvFsmName & "(Parameters);" & NewLine
 			End If
+
+			'Evaluate transaction
+			StRes &= NewTab & NewTab & NewTab & "switch (TmpEvent){" & NewLine
+			For Each TmpTransaction In TmpState.TransactionList
+				'SubFSM
+				If Not TmpState.OnSubFsm Is Nothing Then
+					'SubFSM or normal transaction
+					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrStateEvent.ToString() & ":{ " & VarCurrStateName & " = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				Else
+					'Normal transaction
+					StRes &= NewTab & NewTab & NewTab & NewTab & "case " & TmpTransaction.TrEvent.ToString() & ":{ " & VarCurrStateName & " = " & TmpTransaction.TrDestState.ToString() & "; break; }" & NewLine
+				End If
+			Next
+			If Not TmpState.DefaultTransaction Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & NewTab & "default:{ " & VarCurrStateName & " = " & TmpState.DefaultTransaction.TrDestState.ToString() & "; break; }" & NewLine
+			End If
+			StRes &= NewTab & NewTab & NewTab & "}" & NewLine
+			StRes &= NewLine
 
 			'OnExit
-			StRes &= NewTab & NewTab & NewTab & "if (CurrState != " & TmpStato.CurrState.ToString() & "){" & NewLine
-			If Not TmpStato.OnExit Is Nothing Then
-				StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & PrvFsmName & "_" & TmpStato.OnExit.Method.Name() & "(Parameters);" & NewLine
+			StRes &= NewTab & NewTab & NewTab & "if (" & VarCurrStateName & " != " & TmpState.CurrState.ToString() & "){" & NewLine
+			If Not TmpState.OnExit Is Nothing Then
+				StRes &= NewTab & NewTab & NewTab & NewTab & "FSM_" & CurrFSM.PrvFsmName & "_" & TmpState.OnExit.Method.Name() & "(Parameters);" & NewLine
 			End If
-			StRes &= NewTab & NewTab & NewTab & NewTab & "StateEntry = 1;" & NewLine
+			StRes &= NewTab & NewTab & NewTab & NewTab & VarStateEntryName & " = 1;" & NewLine
 			StRes &= NewTab & NewTab & NewTab & "}" & NewLine
 			StRes &= NewLine
 
@@ -544,8 +573,15 @@ Public Class HFSM(Of TState, TEvent)
 
 		StRes &= NewTab & "}" & NewLine
 
-		StRes &= NewTab & "return CurrState;" & NewLine
+		StRes &= NewTab & "return " & VarCurrStateName & ";" & NewLine
 		StRes &= "}" & NewLine
+
+		'Jump to sub FSM
+		For Each TmpState In CurrFSM.VtStati
+			If Not TmpState.OnSubFsm Is Nothing Then
+				StRes &= ToC_FSMSource(NewLine, TmpState.OnSubFsm)
+			End If
+		Next
 
 		Return StRes
 
@@ -568,16 +604,16 @@ Public Class HFSM(Of TState, TEvent)
 
 		'State list
 		StRes &= "[" & NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In VtStati
 
 			'Generate a state description string like "{ key: "state name", text: "state description" },"
 			StRes &= NewTab & "{ "
-			StRes &= " key: """ & TmpStato.CurrState.ToString() & """ "
+			StRes &= " key: """ & TmpState.CurrState.ToString() & """ "
 			StRes &= ", text: """
-			If Not TmpStato.OnEntry Is Nothing Then StRes &= "[" & TmpStato.OnEntry.Method.Name() & "()]\n"
-			StRes &= TmpStato.CurrState.ToString() & "\n"
-			If Not TmpStato.OnExecute Is Nothing Then StRes &= TmpStato.OnExecute.Method.Name() & "()\n"
-			If Not TmpStato.OnExit Is Nothing Then StRes &= "[" & TmpStato.OnExit.Method.Name() & "()]\n"
+			If Not TmpState.OnEntry Is Nothing Then StRes &= "[" & TmpState.OnEntry.Method.Name() & "()]\n"
+			StRes &= TmpState.CurrState.ToString() & "\n"
+			If Not TmpState.OnExecute Is Nothing Then StRes &= TmpState.OnExecute.Method.Name() & "()\n"
+			If Not TmpState.OnExit Is Nothing Then StRes &= "[" & TmpState.OnExit.Method.Name() & "()]\n"
 			StRes &= """ }," & NewLine
 
 		Next
@@ -585,18 +621,18 @@ Public Class HFSM(Of TState, TEvent)
 
 		'Transaction list
 		StRes &= ", [" & NewLine
-		For Each TmpStato In VtStati
+		For Each TmpState In VtStati
 
-			For Each TmpTransaction In TmpStato.TransactionList
+			For Each TmpTransaction In TmpState.TransactionList
 				'Generate a transaction description string like "{ from: "state key", to: "state key",  text: "transaction condition" },"
-				StRes &= NewTab & "{ from: """ & TmpStato.CurrState.ToString() & """, to: """ & TmpTransaction.TrDestState.ToString() & """, text: """ & TmpTransaction.TrEvent.ToString() & """ }," & NewLine
+				StRes &= NewTab & "{ from: """ & TmpState.CurrState.ToString() & """, to: """ & TmpTransaction.TrDestState.ToString() & """, text: """ & TmpTransaction.TrEvent.ToString() & """ }," & NewLine
 			Next
 
 			'Generate default transaction description string like "{ from: "state key", to: "state key",  text: "*" },"
-			If Not TmpStato.DefaultTransaction Is Nothing Then
+			If Not TmpState.DefaultTransaction Is Nothing Then
 				LineStyle = ""
-				If TmpStato.TransactionList.Count > 0 Then LineStyle = ", color: ""gray"""
-				StRes &= NewTab & "{ from: """ & TmpStato.CurrState.ToString() & """, to: """ & TmpStato.DefaultTransaction.TrDestState.ToString() & """, text: """ & "*" & """ " & LineStyle & " }," & NewLine
+				If TmpState.TransactionList.Count > 0 Then LineStyle = ", color: ""gray"""
+				StRes &= NewTab & "{ from: """ & TmpState.CurrState.ToString() & """, to: """ & TmpState.DefaultTransaction.TrDestState.ToString() & """, text: """ & "*" & """ " & LineStyle & " }," & NewLine
 			End If
 		Next
 		StRes &= "]);"
