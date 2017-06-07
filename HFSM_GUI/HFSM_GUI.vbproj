@@ -11,7 +11,7 @@
     <AssemblyName>HFSM_GUI</AssemblyName>
     <FileAlignment>512</FileAlignment>
     <MyType>WindowsFormsWithCustomSubMain</MyType>
-    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -61,6 +61,10 @@
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="WeifenLuo.WinFormsUI.Docking, Version=2.13.0.0, Culture=neutral, PublicKeyToken=5cded1a1a0a7b481, processorArchitecture=MSIL">
+      <HintPath>..\packages\DockPanelSuite.2.14.0\lib\net35-client\WeifenLuo.WinFormsUI.Docking.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Form1.vb">
@@ -85,6 +89,18 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <Compile Include="WinGUI\ToolEditor.Designer.vb">
+      <DependentUpon>ToolEditor.vb</DependentUpon>
+    </Compile>
+    <Compile Include="WinGUI\ToolEditor.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinGUI\ToolOutC.Designer.vb">
+      <DependentUpon>ToolOutC.vb</DependentUpon>
+    </Compile>
+    <Compile Include="WinGUI\ToolOutC.vb">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Form1.resx">
@@ -95,6 +111,12 @@
       <LastGenOutput>Resources.Designer.vb</LastGenOutput>
       <CustomToolNamespace>My.Resources</CustomToolNamespace>
       <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinGUI\ToolEditor.resx">
+      <DependentUpon>ToolEditor.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinGUI\ToolOutC.resx">
+      <DependentUpon>ToolOutC.vb</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
@@ -108,6 +130,7 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="App.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\HFSM_lib\HFSM_lib.vbproj">
