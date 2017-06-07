@@ -101,7 +101,6 @@ Public Class HFSM(Of TState, TEvent)
 
 	End Class
 
-
 	Private Function GetState(ByVal SearchState As TState) As ClsState
 		Dim NewState As ClsState
 
@@ -336,6 +335,12 @@ Public Class HFSM(Of TState, TEvent)
 		Return CurrState
 
 	End Function
+
+	Public ReadOnly Property CurrentState As TState
+		Get
+			Return CurrState
+		End Get
+	End Property
 
 #End Region
 
